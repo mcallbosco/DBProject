@@ -6,7 +6,8 @@
         {
             "label": "run flet",
             "type": "shell",
-            "command": "flet run ${file}"
+            "command": "flet run ${file}",
+            "problemMatcher": []
         }
     ]
 }
