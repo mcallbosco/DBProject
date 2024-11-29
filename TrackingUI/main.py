@@ -20,7 +20,7 @@ mydb = mysql.connector.connect(
         user= "root",
         password="RaNSEneyHYrO",
     )
-mycursor = mydb.cursor(buffered=True)
+mycursor = mydb.cursor(buffered=True,dictionary=True)
 #tracking number specification
 #first 10 digits are the package number
 #Last 2 digits are the previous numbers added together
@@ -42,6 +42,7 @@ def main(page: ft.Page):
         return False
     
     #fun strings
+    packageHasBeenDelivered = "Your package has been delivered on "
     trackingNumberString = ft.Text("Tracking number: ")
     trackingNumberValue = ft.Text("")
     packageDemensionString = ft.Text("Package demensions: ")
@@ -49,11 +50,18 @@ def main(page: ft.Page):
     packageDemensionValueCubic = ft.Text("", color=ft.colors.GREY_900)
     packageWeightString = ft.Text("Package weight: ")
     packageWeightValue = ft.Text("")
+    packageCreationDate = ft.Text("Label creation date: ")
+    packageCreationDateValue = ft.Text("")
+    packageDispatchDate = ft.Text("Dispatch date: ")
+    packageDispatchDateValue = ft.Text("")
     searchResultsView2 = ft.Column(
         [
             ft.Row([trackingNumberString, trackingNumberValue]),\
             ft.Row([packageDemensionString, packageDemensionValue, packageDemensionValueCubic]),\
-            ft.Row([packageWeightString, packageWeightValue])
+            ft.Row([packageWeightString, packageWeightValue]),\
+            ft.Row([packageCreationDate, packageCreationDateValue]),\
+            ft.Row([packageDispatchDate, packageDispatchDateValue])
+
         ],
         alignment=ft.MainAxisAlignment.CENTER,
         visible=True
@@ -85,14 +93,17 @@ def main(page: ft.Page):
         else:
             searchResultsView.visible = True
             trackingNumberValue.value = routeStripped
-            packageDemensionValue.value = str(int(math.ceil(myresult[0][1])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0][2])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0][3])* dimensionConversion)) + dimensionUnit
-            weightInOz = myresult[0][4] * smallWeightConversion
+            packageDemensionValue.value = str(int(math.ceil(myresult[0]["length"])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0]["width"])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0]["height"])* dimensionConversion)) + dimensionUnit
+            weightInOz = myresult[0]["weight"] * smallWeightConversion
             if weightInOz < 16:
                 packageWeightValue.value = str(weightInOz) + smallWeightUnit
             else:
                 packageWeightValue.value = str(int(weightInOz/16)) + weightUnit + " " + str(math.ceil(weightInOz % 16)) + smallWeightUnit
+            
+            packageCreationDateValue.value = myresult[0]["time_created"]
+            packageDispatchDateValue.value = myresult[0]["time_of_dispatch"]
 
-
+            
 
             page.update()
         
