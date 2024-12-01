@@ -210,12 +210,13 @@ def main(page: ft.Page):
                     location = "Location: Unknown"
                 else:
                     location = "Location: \n" + x["location_name"]
+                
                 historyPanel.controls.append(ft.ExpansionPanel(
                     header=ft.Row([
-                        ft.Text(statusResults[x["status"]]["name"] + " at \n" + prettyTime),
+                        ft.Text(statusResults[x["status"]-1]["name"] + " at \n" + prettyTime),
                         ft.Text("        " +location, expand=True)
                     ]),
-                    content=ft.Column([ft.Text("Details: " + statusResults[x["status"]]["description"])]),
+                    content=ft.Column([ft.Text("Details: " + statusResults[x["status"]-1]["description"])]),
                 ))
             HistoryView.visible = True
 
