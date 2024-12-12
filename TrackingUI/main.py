@@ -228,7 +228,7 @@ def main(page: ft.Page):
                 packageWeightValue.value = str(weightInOz) + smallWeightUnit
             else:
                 packageWeightValue.value = str(int(weightInOz/16)) + weightUnit + " " + str(math.ceil(weightInOz % 16)) + smallWeightUnit
-            insuranceInfo = insurance_info = myresult[0]["insurance_id"]
+            insuranceInfo = myresult[0]["insurance_id"]
             if insuranceInfo:
                 mycursor.execute("SELECT * FROM insurance WHERE id = " + str(insuranceInfo) + ";")
                 insuranceResult = mycursor.fetchall()
@@ -291,7 +291,7 @@ def main(page: ft.Page):
                 if len(historyResults) == 0:
                     packageInProgressStatus.value = "has been created"
                 else:
-                    packageInProgressStatus.value = statusResults[historyResults[len(historyResults)-1]["status"]]["tense_name"]
+                    packageInProgressStatus.value = statusResults[historyResults[len(historyResults)-1]["status"]-1]["tense_name"]
                 if daydiff < 0:
                     packageInProgressLate.visible = True
                     packageInProgressTime.visible = False

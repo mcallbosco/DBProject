@@ -54,6 +54,12 @@ def spawnLogin(page: ft.Page):
         typeOfUser = "Driver" #We will grab this from the user database if we end up doing that
         print("Username: " + txtf_username.value)
         print("Password: " + txtf_password.value)
+        mycursor.execute(f"SELECT * FROM accounts WHERE username = '{txtf_username.value}'")
+        user = mycursor.fetchone()
+        if user == None:
+            valid = False
+        else:
+            typeOfUser = user['roll']
         if valid:
             match typeOfUser:
                 case "Manager":
@@ -65,7 +71,7 @@ def spawnLogin(page: ft.Page):
                     spawnDriver(page)
                 case "Clerk":
                     page.remove(loginPage)
-                    spawnClerk(page)
+                    spawnClerk(page, user)
                 case _:
                     print("Unimplimented user type")
         else:
@@ -275,8 +281,201 @@ def spawnDriver(page: ft.Page):
     swapViews()
 
 
-def spawnClerk(page: ft.Page):
-    pass
+def spawnClerk(page: ft.Page, user):
+    page.scroll = True
+    #page to enter in package info. 
+    """CREATE TABLE package (
+    id INT PRIMARY KEY,
+    width INT,    -- In centimeters
+    length INT,     -- In centimeters
+    height INT,   -- In centimeters
+    weight INT,  -- In grams
+    price DECIMAL(10, 2),  -- In dollars
+    type INT,
+    insurance_id INT,
+    shipment_id INT,
+    estimated_distance INT,
+    estimated_time_from_dispatch INT,
+    time_created TIMESTAMP,
+    time_updated TIMESTAMP,
+    time_of_dispatch TIMESTAMP,
+    time_of_delivery TIMESTAMP,
+    delivery_cordinates_x DECIMAL(6,4),
+    delivery_cordinates_y DECIMAL(6,4),
+    delivery_conformation VARCHAR(255)
+    );"""
+    """Create Table destination_address (
+    id INT PRIMARY KEY,
+    country VARCHAR(2),
+    name_line VARCHAR(255),
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    organisation_name VARCHAR(255),
+    administrative_area VARCHAR(50),
+    sub_administrative_area VARCHAR(50),
+    locality VARCHAR(50),
+    dependent_locality VARCHAR(50),
+    postal_code VARCHAR(50),
+    thoroughfare VARCHAR(255),
+    premise VARCHAR(255),
+    sub_premise VARCHAR(255)
+    );"""
+    page.title = "Clerk"
+    def generateInsuranceTypeString(insuranceType):
+        return insuranceType['name'] + " $" + "max: $" + str(insuranceType['max_coverage'])
+    def generateid():
+        mycursor.execute("SELECT MAX(id) FROM package")
+        return mycursor.fetchone()['MAX(id)'] + 1
+    def displayIDProperly(id):
+        return str(id) + str(id[0]+id[1]+id[2]+id[3]+id[4]+id[5]+id[6]+id[7]+id[8]+id[9])[-2:].zfill(2)
+    #get insurance types from insuranceType
+    mycursor.execute("SELECT * FROM insuranceType")
+    insuranceTypes = mycursor.fetchall()
+    insuranceTypeOptions = []
+    insuranceDropDown = ft.Dropdown()
+    insuranceDropDown.label = "Insurance Type"
+    insuranceTypeOptions.append(ft.dropdown.Option(text="None", data=0))
+    for insuranceType in insuranceTypes:
+        insuranceTypeOptions.append(ft.dropdown.Option(text=generateInsuranceTypeString(insuranceType), data=insuranceType['id']))
+    dimensionTypeOptions = []
+    dimensionDropDown = ft.Dropdown(width=60)
+    dimensionDropDown.label = "unit"
+    dimensionTypeOptions.append(ft.dropdown.Option(text="IN", data=2.54, key=0))
+    dimensionTypeOptions.append(ft.dropdown.Option(text="FT", data=30.48, key=1))
+    dimensionTypeOptions.append(ft.dropdown.Option(text="CM", data=0, key=2))
+    dimensionDropDown.options = dimensionTypeOptions
+    dimensionDropDown.value = 0
+
+
+    #get shipment types from shipmentType
+    mycursor.execute("SELECT * FROM shipment_type")
+    shipmentTypes = mycursor.fetchall()
+    shipmentTypeOptions = []
+    shipmentDropDown = ft.Dropdown()
+    shipmentDropDown.label = "Shipment Type"
+    for shipmentType in shipmentTypes:
+        shipmentTypeOptions.append(ft.dropdown.Option(text=shipmentType['name'], data=shipmentType['id']))
+    shipmentDropDown.options = shipmentTypeOptions
+    insuranceDropDown.options = insuranceTypeOptions
+    packageWidthString = ft.Text("Dimensions: ")
+    packageDimensionsSeperator = ft.Text(" x ")
+    packageWidthField = ft.TextField(label="W", width=40)
+    packageLengthField = ft.TextField(label="L", width=40)
+    packageHeightField = ft.TextField(label="H", width=40)
+    
+    packageWeightString = ft.Text("Weight: ")
+    packageWeightField = ft.TextField()
+    packageTypeString = ft.Text("Shipment Type:")
+    packageTypeField = ft.TextField()
+    packageInsuranceString = ft.Text("Insurance Type: ")
+    packageInsuranceField = insuranceDropDown
+    packageShipmentString = ft.Text("Shipment Type: ")
+    packageShipmentField = shipmentDropDown
+
+    packageFirstNameString = ft.Text("First Name: ")
+    packageFirstNameField = ft.TextField()
+    packageLastNameString = ft.Text("Last Name: ")
+    packageLastNameField = ft.TextField()
+    packageOrganisationString = ft.Text("Organisation: ")
+    packageOrganisationField = ft.TextField()
+    packageAdminAreaString = ft.Text("Administrative Area: ")
+    packageAdminAreaField = ft.TextField()
+    packageLocalityString = ft.Text("Locality: ")
+    packageLocalityField = ft.TextField()
+    packagePostalCodeString = ft.Text("Postal Code: ")
+    packagePostalCodeField = ft.TextField()
+    packageThoroughfareString = ft.Text("Thoroughfare: ")
+    packageThoroughfareField = ft.TextField()
+    packagePremiseString = ft.Text("Premise: ")
+    packagePremiseField = ft.TextField()
+    packageSubPremiseString = ft.Text("Sub Premise: ")
+    packageSubPremiseField = ft.TextField()
+    packageCountryString = ft.Text("Country: ")
+    packageCountryField = ft.TextField()
+    packageDeclaredValueString = ft.Text("Declared Value: ")
+    packageDeclaredValueField = ft.TextField()
+
+
+    def generateEstimate(event):
+        calculatedDistance = 500 #this would be calculated based on address and route, but it is out of scope. 
+        #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time. 
+        #get the insurance cost
+        insuranceCost = 0
+        insuranceID = packageInsuranceField.value
+        for insuranceType in insuranceTypes:
+            if generateInsuranceTypeString(insuranceType) == insuranceID:
+                insuranceCost = insuranceType['cost_per500Miles']
+        print(insuranceCost)
+        for insuranceType in insuranceTypes:
+            if insuranceType['id'] == insuranceID:
+                insuranceCost = insuranceType['cost_per500Miles']
+        #get the shipment cost
+        shipmentCost = 0
+        shipmentID = packageShipmentField.value
+        for shipmentType in shipmentTypes:
+            if shipmentType['id'] == shipmentID:
+                shipmentCost = shipmentType['cost_per500Miles']
+        #get the total cost
+        totalCost = insuranceCost + shipmentCost
+        #get the estimated time
+        estimatedTime = 0
+        for shipmentType in shipmentTypes:
+            if shipmentType['id'] == shipmentID:
+                estimatedTime = shipmentType['days_per500Miles']
+        if estimatedTime == 0:
+            estimatedTime = 1
+        #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time.
+        material_actions = [
+            ft.TextButton(text="Cancel", on_click=lambda e: page.close(e.control.parent)),
+            ft.TextButton(text="Process"),
+        ]
+        page.open(ft.AlertDialog(
+            title=ft.Text("Estimated Costs"),
+            content=ft.Text("Estimated Distance: " + str(calculatedDistance) + " miles\n" + "Estimated Insurance Cost: $" + str(insuranceCost) + "\nEstimated Shipment Cost: $" + str(shipmentCost) + "\nTotal Cost: $" + str(totalCost) + "\nEstimated Time: " + str(estimatedTime) + " days"),
+            actions=material_actions,
+        ))
+
+    def spawnAdditionalOptions(event):
+        #popup with insurance options
+        material_actions = [
+            ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)),
+            ]
+        page.open(ft.AlertDialog(
+            title=ft.Text("Additional Options"),
+            content=ft.Column([ft.Text("Insurance Options"), packageInsuranceField, ft.Text("Declared Value"), packageDeclaredValueField]),
+            actions=material_actions,
+        ))
+
+
+
+
+
+    packageProcessButton = ft.FilledTonalButton("Estimate", on_click=generateEstimate)
+    additionalInfoButton = ft.FilledTonalButton("Additional Options", on_click=spawnAdditionalOptions)
+
+
+    inputContainer = ft.Column(
+        [
+            ft.Row([packageWidthString, packageWidthField, packageDimensionsSeperator, packageLengthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
+            ft.Row([packageTypeString, packageTypeField]),
+            ft.Row([packageShipmentString, packageShipmentField]),
+            ft.Row([packageFirstNameString, packageFirstNameField]),
+            ft.Row([packageLastNameString, packageLastNameField]),
+            ft.Row([packageOrganisationString, packageOrganisationField]),
+            ft.Row([packageOrganisationString, packageOrganisationField]),
+            ft.Row([packageAdminAreaString, packageAdminAreaField]),
+            ft.Row([packageLocalityString, packageLocalityField]),
+            ft.Row([packagePostalCodeString, packagePostalCodeField]),
+            ft.Row([packageThoroughfareString, packageThoroughfareField]),
+            ft.Row([packagePremiseString, packagePremiseField]),
+            ft.Row([packageSubPremiseString, packageSubPremiseField]),
+            ft.Row([packageCountryString, packageCountryField]),\
+            additionalInfoButton,
+            packageProcessButton
+        ],
+    )
+    page.add(inputContainer)
+    
 
     
         
