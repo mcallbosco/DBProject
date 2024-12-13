@@ -180,7 +180,7 @@ def spawnDriver(page: ft.Page):
                             #left facility.
                             lastStatus = getLatestStatus(package['package_id'])
                             lastID = lastStatus['location_id']
-                            mycursor.execute(f"SELECT * FROM Facilities WHERE id = {package['from_facility_id']}")
+                            mycursor.execute(f"SELECT * FROM facilities WHERE id = {package['from_facility_id']}")
                             facility = mycursor.fetchone()
                             nextStatus = facility["departed_status_code"]
                             print (nextStatus)
@@ -208,7 +208,7 @@ def spawnDriver(page: ft.Page):
                 def handle_delivery_conf(e):
                     if e.control.text == "Yes":
                         toFacilityID = assignmentDetails["to_facility_id"]
-                        mycursor.execute(f"SELECT * FROM Facilities WHERE id = {toFacilityID}")
+                        mycursor.execute(f"SELECT * FROM facilities WHERE id = {toFacilityID}")
                         facility = mycursor.fetchone()
                         print (facility)
                         status = facility["arrived_status_code"]
@@ -329,7 +329,7 @@ def spawnClerk(page: ft.Page, user):
     def displayIDProperly(id):
         return str(id) + str(id[0]+id[1]+id[2]+id[3]+id[4]+id[5]+id[6]+id[7]+id[8]+id[9])[-2:].zfill(2)
     #get insurance types from insuranceType
-    mycursor.execute("SELECT * FROM insuranceType")
+    mycursor.execute("SELECT * FROM insurance_type")
     insuranceTypes = mycursor.fetchall()
     insuranceTypeOptions = []
     insuranceDropDown = ft.Dropdown()
