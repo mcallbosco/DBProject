@@ -26,29 +26,6 @@ def displayIDProperly(id):
 
     
 def spawnLogin(page: ft.Page):
-    txtf_username = ft.TextField(text_align=ft.TextAlign.LEFT, width=300)
-    txtf_username.label = "Username"
-    txtf_password = ft.TextField(text_align=ft.TextAlign.LEFT, width=300)
-    txtf_password.label = "Password"
-    txtf_password.password = True
-    but_login = ft.FilledTonalButton("Login")
-    image = ft.Image(src = f"/res/logoTemp.png")
-    txt_invalid = ft.Text("   ", color=ft.colors.RED)
-    loginPage = ft.Column(
-            [
-                image,
-                txtf_username,
-                txtf_password,
-                txt_invalid,
-                ft.Row(
-                [but_login],
-                alignment=ft.MainAxisAlignment.END,
-                width=300 
-            )
-            ],
-            alignment=ft.MainAxisAlignment.CENTER,
-
-        )
     def login_click(e):
         valid = True
         typeOfUser = "Driver" #We will grab this from the user database if we end up doing that
@@ -77,6 +54,29 @@ def spawnLogin(page: ft.Page):
             txtf_password.border_color = ft.colors.RED
             txtf_username.border_color = ft.colors.RED
             page.update()
+    txtf_username = ft.TextField(text_align=ft.TextAlign.LEFT, width=300, on_submit=login_click)
+    txtf_username.label = "Username"
+    txtf_password = ft.TextField(text_align=ft.TextAlign.LEFT, width=300)
+    txtf_password.label = "Password"
+    txtf_password.password = True
+    but_login = ft.FilledTonalButton("Login")
+    image = ft.Image(src = f"/res/logoTemp.png")
+    txt_invalid = ft.Text("   ", color=ft.colors.RED)
+    loginPage = ft.Column(
+            [
+                image,
+                txtf_username,
+                txtf_password,
+                txt_invalid,
+                ft.Row(
+                [but_login],
+                alignment=ft.MainAxisAlignment.END,
+                width=300 
+            )
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+
+        )
 
     def textChange(e):
         if txt_invalid.value != "   ":
@@ -91,6 +91,7 @@ def spawnLogin(page: ft.Page):
     page.add(
         loginPage
     )
+    txtf_username.focus()
 
 def spawnManager(page: ft.Page, user):
     page.scroll = True
@@ -183,7 +184,7 @@ def spawnManager(page: ft.Page, user):
             addressString = constructAddressString(address)
             assignmentPanel.controls.append(ft.ExpansionTile(
                 title=ft.Row([
-                    ft.Text(str(package['package_id'])),
+                    ft.Text(str(displayIDProperly(str(package['package_id'])))),
                 ]),
                 controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
             ))
@@ -227,6 +228,8 @@ def spawnDriver(page: ft.Page, user):
                         toFacilityID = assignmentDetails["to_facility_id"]
                         if toFacilityID == 0:
                             mycursor.execute("UPDATE package SET time_of_delivery = NOW() WHERE id = " + str(e.control.data))
+                        else:
+                            mycursor.execute(f"INSERT INTO ready_for_assignment (package_id, time_created, location) VALUES ({e.control.data}, NOW(), {toFacilityID})")
                         mycursor.execute(f"SELECT * FROM facilities WHERE id = {toFacilityID}")
                         facility = mycursor.fetchone()
                         status = facility["arrived_status_code"]
@@ -245,17 +248,22 @@ def spawnDriver(page: ft.Page, user):
                     if e.control.text == "Yes":
                         time.sleep(.2)
                         swapViews(1)
+                yesbuttonforthing = ft.TextButton(text="Yes", on_click=handle_delivery_conf, data=manualData)
+
                 #
                 material_actions = [
-                    ft.TextButton(text="Yes", on_click=handle_delivery_conf, data=manualData),
                     ft.TextButton(text="No", on_click=handle_delivery_conf, data=manualData),
+                    yesbuttonforthing,
+
                     ]
                 page.open(ft.AlertDialog(
                         title=ft.Text("Confirm Delivery"),
                         content=ft.Text("Tracking number: " + displayIDProperly(str(manualData)) + "\n Package Address:\n" + constructAddressString(address) + "\n Destination Address:\n " + destinationFacilityName),
                         actions=material_actions,
                     ))
+                yesbuttonforthing.focus()
     userID = user['id']
+
     def getLatestStatus(packageID):
         mycursor.execute(f"SELECT * FROM package_status WHERE package_id = {packageID} ORDER BY time_created DESC")
         return mycursor.fetchone()
@@ -527,7 +535,25 @@ def spawnClerk(page: ft.Page, user):
     packageCountryField = ft.TextField(max_length = 2)
     packageDeclaredValueString = ft.Text("Declared Value: ")
     packageDeclaredValueField = ft.TextField(input_filter=ft.InputFilter('^[0-9]*$'), max_length=10)
-
+    def initilizeFields(event):
+        packageWidthField.focus()
+        packageWidthField.value = ""
+        packageLengthField.value = ""
+        packageHeightField.value = ""
+        packageWeightField.value = ""
+        packageInsuranceField.value = "None"
+        packageShipmentField.value = ""
+        packageFirstNameField.value = ""
+        packageLastNameField.value = ""
+        packageOrganisationField.value = ""
+        packageAdminAreaField.value = ""
+        packageLocalityField.value = ""
+        packagePostalCodeField.value = ""
+        packageThoroughfareField.value = ""
+        packagePremiseField.value = ""
+        packageCountryField.value = ""
+        packageDeclaredValueField.value = ""
+        page.update()
     def addPackageTransaction(event):
         
         calculatedDistance = 500
@@ -549,9 +575,14 @@ def spawnClerk(page: ft.Page, user):
         insuranceID = packageInsuranceField.value
         insuranceID = None
         insuranceIDFinal = 0
+        insuranceRow = None
         for insuranceType in insuranceTypes:
             if insuranceType['id'] == insuranceID:
+                insuranceRow = insuranceType
                 insuranceIDFinal = insuranceType['id']
+        if insuranceIDFinal != 0:
+            insuranceCost = float(insuranceRow['cost_per500Miles']) * (calculatedDistance/500)
+
         shipmentID = packageShipmentField.value
         firstName = packageFirstNameField.value
         lastName = packageLastNameField.value
@@ -567,22 +598,27 @@ def spawnClerk(page: ft.Page, user):
         
         mycursor.execute(f"INSERT INTO destination_address (id, country, name_line, first_name, last_name, organisation_name, administrative_area, locality, postal_code, thoroughfare, premise) VALUES ({id}, '{country}', '{firstName} {lastName}', '{firstName}', '{lastName}', '{organisation}', '{adminArea}', '{locality}', '{postalCode}', '{thoroughfare}', '{premise}')")
         if insuranceIDFinal != 0:
-            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, 0, {declaredValue})")
+            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, insuranceCost, {declaredValue})")
         
         mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({id}, 1, NOW(), 0, 0, \"{facility["name"]}\", {user["facility_id"]})")
         mycursor.execute(f"INSERT INTO ready_for_assignment (package_id, time_created, location) VALUES ({id}, NOW(), {user["facility_id"]})")
         mydb.commit()
         page.close(event.control.parent)
         #popup with tracking number
+        def okayAction(e):
+            page.close(e.control.parent)
+            initilizeFields(None)
+        closeButton = ft.TextButton(text="OK", on_click=okayAction)
         material_actions = [
-            ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)), ft.TextButton(text="Copy Tracking Number", on_click=lambda e: page.set_clipboard(displayIDProperly(str(id)))),
+            closeButton, ft.TextButton(text="Copy Tracking Number", on_click=lambda e: page.set_clipboard(displayIDProperly(str(id)))),
             ]
         page.open(ft.AlertDialog(
             title=ft.Text("Package Added"),
             content=ft.Text("Tracking Number: " + displayIDProperly(str(id))),
             actions=material_actions,
+            on_dismiss=initilizeFields,
         ))
-
+        closeButton.focus()
     def generateEstimate(event):
         #check that all boxes are filled that are required
         if packageWidthField.value == "" or packageLengthField.value == "" or packageHeightField.value == "" or packageWeightField.value == "" or packageShipmentField.value == "" or packageFirstNameField.value == "" or packageLastNameField.value == "" or packageAdminAreaField.value == "" or packageLocalityField.value == "" or packagePostalCodeField.value == "" or packageThoroughfareField.value == "" or packageCountryField.value == "":
@@ -602,16 +638,16 @@ def spawnClerk(page: ft.Page, user):
         insuranceID = packageInsuranceField.value
         for insuranceType in insuranceTypes:
             if generateInsuranceTypeString(insuranceType) == insuranceID:
-                insuranceCost = insuranceType['cost_per500Miles']
+                insuranceCost = float(insuranceType['cost_per500Miles']) * (calculatedDistance/500)
         for insuranceType in insuranceTypes:
             if insuranceType['id'] == insuranceID:
-                insuranceCost = insuranceType['cost_per500Miles']
+                insuranceCost = float(insuranceType['cost_per500Miles']) * (calculatedDistance/500)
         #get the shipment cost
         shipmentCost = 0
         shipmentID = packageShipmentField.value
         for shipmentType in shipmentTypes:
             if shipmentType['name'] == shipmentID:
-                shipmentCost = shipmentType['cost_per500Miles']
+                shipmentCost = float(shipmentType['cost_per500Miles']) * (calculatedDistance/500)
 
         
         #get the total cost
@@ -620,19 +656,22 @@ def spawnClerk(page: ft.Page, user):
         estimatedTime = 0
         for shipmentType in shipmentTypes:
             if shipmentType['id'] == shipmentID:
-                estimatedTime = shipmentType['days_per500Miles']
+                estimatedTime = float(shipmentType['days_per500Miles']) * (calculatedDistance/500)
+
         if estimatedTime == 0:
             estimatedTime = 1
         #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time.
+        processButton = ft.TextButton(text="Process", on_click=addPackageTransaction)
         material_actions = [
             ft.TextButton(text="Cancel", on_click=lambda e: page.close(e.control.parent)),
-            ft.TextButton(text="Process", on_click=addPackageTransaction),
+            processButton,
         ]
         page.open(ft.AlertDialog(
             title=ft.Text("Estimated Costs"),
             content=ft.Text("Estimated Distance: " + str(calculatedDistance) + " miles\n" + "Estimated Insurance Cost: $" + str(insuranceCost) + "\nEstimated Shipment Cost: $" + str(shipmentCost) + "\nTotal Cost: $" + str(totalCost) + "\nEstimated Time: " + str(estimatedTime) + " days"),
             actions=material_actions,
         ))
+        processButton.focus()
     def checkAdditionalOptions(event):
         if packageInsuranceField.value != "None" or None:
             #make sure there's a declared value
@@ -674,7 +713,6 @@ def spawnClerk(page: ft.Page, user):
             ft.Row([packageFirstNameString, packageFirstNameField]),
             ft.Row([packageLastNameString, packageLastNameField]),
             ft.Row([packageOrganisationString, packageOrganisationField]),
-            ft.Row([packageOrganisationString, packageOrganisationField]),
             ft.Row([packageAdminAreaString, packageAdminAreaField]),
             ft.Row([packageLocalityString, packageLocalityField]),
             ft.Row([packagePostalCodeString, packagePostalCodeField]),
@@ -686,6 +724,7 @@ def spawnClerk(page: ft.Page, user):
         ],
     )
     page.add(inputContainer)
+    initilizeFields(None)
 
 
 ft.app(main, view=ft.AppView.WEB_BROWSER)
