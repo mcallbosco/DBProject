@@ -192,7 +192,6 @@ def main(page: ft.Page):
         print (routeStripped)
         print (route.data)
         if not checkTracking(routeStripped) and doInitialFormatCheck or route.data == "/":
-            txti_tracking.focus()
             return
         routeStripped = routeStripped[0:10]
 
@@ -254,6 +253,7 @@ def main(page: ft.Page):
             print (historyResults)
             progressBar.value = calculatePersentageBar(historyResults, daydiff, myresult[0]["estimated_time_from_dispatch"])
             if delivered:
+                progressBar.value = 1
                 beingDeliveredText.visible = False
                 prettyDelivery = delivered.strftime("%m/%d/%Y, %H:%M:%S")
                 packageDeliveryDate.value = prettyDelivery
@@ -329,7 +329,6 @@ def main(page: ft.Page):
             if not checkTracking(txti_tracking.value):
                 txti_tracking.border_color = ft.colors.RED
                 errorMessage.visible = True
-                txti_tracking.focus()
                 page.update()
                 return
         #start sql query
@@ -386,5 +385,4 @@ def main(page: ft.Page):
     page.on_route_change = route_change
     page.go(page.route)
     page.scroll = True
-
 ft.app(main, view = ft.AppView.WEB_BROWSER)

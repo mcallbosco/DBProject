@@ -103,7 +103,7 @@ def spawnManager(page: ft.Page, user):
     assignmentView = ft.Container(content=ft.ExpansionTile(
                     title=ft.Text("Sitting Packages"),
                     affinity=ft.TileAffinity.LEADING,
-                    initially_expanded=False,
+                    initially_expanded=True,
                     controls=[
                         assignmentPanel
                     ],
@@ -168,11 +168,27 @@ def spawnManager(page: ft.Page, user):
         for driver in listOfDrivers:
             if driver['username'] == listOfDriversDropDown.value:
                 selectedUserID = driver["id"]
+
+        if selectedFacility == None or selectedUserID == "":
+            #popup to select a facility
+            material_actions = [
+                ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)),
+                ]
+            page.open(ft.AlertDialog(
+                title=ft.Text("Error"),
+                content=ft.Text("Please select a destination facility/driver."),
+                actions=material_actions,
+            ))
+            return
         mycursor.execute(f"DELETE FROM ready_for_assignment WHERE package_id = {e.control.data}")
         mycursor.execute(f"INSERT INTO package_assignment (package_id, driver_id, from_facility_id, to_facility_id, status) VALUES ({e.control.data}, {selectedUserID}, {user['facility_id']}, {selectedFacility}, 1)")
         mydb.commit()
+        mycursor.execute(f"UPDATE package SET time_of_dispatch = NOW() WHERE id = {e.control.data}")
+        mydb.commit()
         for assignment in assignmentPanel.controls:
-            if assignment.title.controls[0].value == str(e.control.data):
+            print (assignment.title.controls[0].value)
+            print (e.control.data)
+            if assignment.title.controls[0].value == str(displayIDProperly(str(e.control.data))):
                 assignmentPanel.controls.remove(assignment)
         page.update()
 
@@ -198,6 +214,7 @@ def spawnManager(page: ft.Page, user):
 
 
 def spawnDriver(page: ft.Page, user):
+    page.scroll = True
     inTheMiddleOfSomething = False
     def constructAddressString(address):
             addressString = ""
@@ -214,7 +231,7 @@ def spawnDriver(page: ft.Page, user):
     def markAsDelivered(e, manualData = None):
                 if manualData == None:
                     manualData = e.control.data
-                mycursor.execute(f"SELECT * FROM package_assignment WHERE package_id = {manualData}")
+                mycursor.execute(f"SELECT * FROM package_assignment WHERE package_id = {manualData} and driver_id = {userID} and status = 2")
                 assignmentDetails = mycursor.fetchone()
                 mycursor.execute(f"SELECT * FROM package WHERE id = {manualData}")
                 packageDetails = mycursor.fetchone()
@@ -241,7 +258,7 @@ def spawnDriver(page: ft.Page, user):
                             
                         
                         mycursor.execute(f"Insert INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({e.control.data},{status}, NOW(), 0, 0, '{locationName}', {toFacilityID})")
-                        mycursor.execute(f"UPDATE package_assignment SET status = 3 WHERE package_id = {e.control.data}")
+                        mycursor.execute(f"UPDATE package_assignment SET status = 3 WHERE package_id = {e.control.data} and driver_id = {userID} and status = 2")
                         mydb.commit()
                     page.close(e.control.parent)
                     page.update()
@@ -364,7 +381,7 @@ def spawnDriver(page: ft.Page, user):
         #Logic for delivery view
         else:
             def unload(e):
-                mycursor.execute(f"UPDATE package_assignment SET status = 1 WHERE package_id = {e.control.data}")
+                mycursor.execute(f"UPDATE package_assignment SET status = 1 WHERE package_id = {e.control.data} and driver_id = {userID} and status = 2")
                 mydb.commit()
                 swapViews(1)
             
@@ -486,7 +503,7 @@ def spawnClerk(page: ft.Page, user):
     dimensionTypeOptions.append(ft.dropdown.Option(text="IN", data=2.54, key=0))
     dimensionTypeOptions.append(ft.dropdown.Option(text="FT", data=30.48, key=1))
     dimensionTypeOptions.append(ft.dropdown.Option(text="CM", data=1, key=2))
-    lengthKey = {0: "2.54", 1: "30.48", 2: "1"}
+    lengthKey = {"0": "2.54", "1": "30.48", "2": "1"}
     dimensionDropDown.options = dimensionTypeOptions
     dimensionDropDown.value = 0
 
@@ -567,10 +584,9 @@ def spawnClerk(page: ft.Page, user):
                 shipmentTypeID = shipmentType['id']
                 shipmentETA = float(shipmentType['days_per500Miles']) * calculatedDistance
                 shipmentCost = shipmentType['cost_per500Miles']
-        
-        width = float(packageWidthField.value) * float(lengthKey[dimensionDropDown.value])
-        length = float(packageLengthField.value) * float(lengthKey[dimensionDropDown.value])
-        height = float(packageHeightField.value) * float(lengthKey[dimensionDropDown.value])
+        width = float(packageWidthField.value) * float(lengthKey[str(dimensionDropDown.value)])
+        length = float(packageLengthField.value) * float(lengthKey[str(dimensionDropDown.value)])
+        height = float(packageHeightField.value) * float(lengthKey[str(dimensionDropDown.value)])
         weight = float(packageWeightField.value) * 28.3495
         insuranceID = packageInsuranceField.value
         insuranceID = None
@@ -668,7 +684,7 @@ def spawnClerk(page: ft.Page, user):
         ]
         page.open(ft.AlertDialog(
             title=ft.Text("Estimated Costs"),
-            content=ft.Text("Estimated Distance: " + str(calculatedDistance) + " miles\n" + "Estimated Insurance Cost: $" + str(insuranceCost) + "\nEstimated Shipment Cost: $" + str(shipmentCost) + "\nTotal Cost: $" + str(totalCost) + "\nEstimated Time: " + str(estimatedTime) + " days"),
+            content=ft.Text(f"Estimated Distance: {calculatedDistance:.2f} miles\nEstimated Insurance Cost: ${insuranceCost:.2f}\nEstimated Shipment Cost: ${shipmentCost:.2f}\nTotal Cost: ${totalCost:.2f}\nEstimated Time: {estimatedTime} days"),
             actions=material_actions,
         ))
         processButton.focus()
