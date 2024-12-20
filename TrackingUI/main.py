@@ -2,13 +2,12 @@ import flet as ft
 from flet import TemplateRoute
 import mysql.connector
 import random
-from geopy.geocoders import Nominatim
 
 import math
 import flet.map as map
 import datetime
 showExampleStuff = False
-doInitialFormatCheck = False
+doInitialFormatCheck = True
 
 weightUnit = "lb"
 smallWeightUnit = "oz"
@@ -17,7 +16,6 @@ cubicDemensionUnit = "ft^3"
 smallWeightConversion = 0.035274
 cubicConversion = 0.0000353147
 dimensionConversion = 0.393701
-geolocator = Nominatim(user_agent="geoapiExercises")
 
 mydb = mysql.connector.connect(
         host="localhost",
@@ -42,15 +40,19 @@ def main(page: ft.Page):
     screenWidth = page.width
     global map_container
     
-    page.title = "Flet counter example"
+    page.title = "Tracking Updates"
 
     txt_number = ft.TextField(text_align=ft.TextAlign.RIGHT, width=100)
 
     def checkTracking(number):
+        id = str(number)
         if len(number) == 12:
-            if number[10:12] == str(sum([int(x) for x in number[:-2]])):
+            if number[10:12] == str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]:
                 return True
         return False
+    
+    def displayIDProperly(id):
+        return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
     
     
     
@@ -183,13 +185,16 @@ def main(page: ft.Page):
             
 
     def route_change(route):
+        print("test")
         global map_container
         #checks
         routeStripped = route.data[1:]
+        print (routeStripped)
         print (route.data)
         if not checkTracking(routeStripped) and doInitialFormatCheck or route.data == "/":
+            txti_tracking.focus()
             return
-        
+        routeStripped = routeStripped[0:10]
 
         mycursor.execute("SELECT * FROM package WHERE id = " + str(int(routeStripped)) + ";")
         myresult = mycursor.fetchall()
@@ -221,9 +226,9 @@ def main(page: ft.Page):
             HistoryView.visible = True
 
             searchResultsView.visible = True
-            trackingNumberValue.value = routeStripped
+            trackingNumberValue.value = displayIDProperly(routeStripped)
             packageDemensionValue.value = str(int(math.ceil(myresult[0]["length"])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0]["width"])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0]["height"])* dimensionConversion)) + dimensionUnit
-            weightInOz = myresult[0]["weight"] * smallWeightConversion
+            weightInOz = round(myresult[0]["weight"] * smallWeightConversion)
             if weightInOz < 16:
                 packageWeightValue.value = str(weightInOz) + smallWeightUnit
             else:
@@ -324,11 +329,12 @@ def main(page: ft.Page):
             if not checkTracking(txti_tracking.value):
                 txti_tracking.border_color = ft.colors.RED
                 errorMessage.visible = True
+                txti_tracking.focus()
                 page.update()
                 return
         #start sql query
         mycursor.execute("USE shipping")
-        mycursor.execute("SELECT * FROM package WHERE id = " + str(int(txti_tracking.value)) + ";")
+        mycursor.execute("SELECT * FROM package WHERE id = " + str(int(txti_tracking.value))[0:10] + ";")
         myresult = mycursor.fetchall()
         if len(myresult) == 0:
             errorMessage.visible = True
@@ -342,9 +348,12 @@ def main(page: ft.Page):
         page.update()
 
     
+    def clearColor(e):
+        txti_tracking.border_color = ft.colors.GREY_500
+        errorMessage.visible = False
+        page.update()
 
-
-    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT)
+    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback)
     txti_tracking.width = page.width * 0.8
     but_check = ft.FilledTonalButton("Track")
     but_check.on_click = checkCallback

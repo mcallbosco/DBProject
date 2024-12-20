@@ -21,8 +21,8 @@ def main(page: ft.Page):
 
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     spawnLogin(page)
-
-    
+def displayIDProperly(id):
+        return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
 
     
 def spawnLogin(page: ft.Page):
@@ -52,8 +52,6 @@ def spawnLogin(page: ft.Page):
     def login_click(e):
         valid = True
         typeOfUser = "Driver" #We will grab this from the user database if we end up doing that
-        print("Username: " + txtf_username.value)
-        print("Password: " + txtf_password.value)
         mycursor.execute(f"SELECT * FROM accounts WHERE username = '{txtf_username.value}'")
         user = mycursor.fetchone()
         if user == None:
@@ -65,10 +63,10 @@ def spawnLogin(page: ft.Page):
                 case "Manager":
                     #clear the page
                     page.remove(loginPage)
-                    spawnManager(page)
+                    spawnManager(page, user)
                 case "Driver":
                     page.remove(loginPage)
-                    spawnDriver(page)
+                    spawnDriver(page, user)
                 case "Clerk":
                     page.remove(loginPage)
                     spawnClerk(page, user)
@@ -94,20 +92,184 @@ def spawnLogin(page: ft.Page):
         loginPage
     )
 
-def spawnManager(page: ft.Page):
-    pass
+def spawnManager(page: ft.Page, user):
+    page.scroll = True
+    screenWidth = page.width
+    #List of all packages in the facility. When a package is clicked on, there will be a popup with details, and the ability to assign a package to the driver with a destination facility.
+    mycursor.execute(f"SELECT * FROM ready_for_assignment where location = {user['facility_id']}")
+    packages = mycursor.fetchall()
+    assignmentPanel = ft.Column()
+    assignmentView = ft.Container(content=ft.ExpansionTile(
+                    title=ft.Text("Sitting Packages"),
+                    affinity=ft.TileAffinity.LEADING,
+                    initially_expanded=False,
+                    controls=[
+                        assignmentPanel
+                    ],
+                    
+                    expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
+    unassignmentPanel = ft.ExpansionPanelList(
+        controls=[])
+    unassignmentView = ft.Container(content=ft.ExpansionTile(
+                    title=ft.Text("Sitting Packages"),
+                    affinity=ft.TileAffinity.LEADING,
+                    initially_expanded=False,
+                    controls=[
+                        assignmentPanel
+                    ],
+                    
+                    expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
+    listOfDrivers = []
+    mycursor.execute(f"SELECT * FROM accounts WHERE roll = 'Driver' and facility_id = {user['facility_id']}")
+    listOfDrivers = mycursor.fetchall()
+    listOfLocations = []
+    mycursor.execute(f"SELECT * FROM facilities")
+    listOfLocations = mycursor.fetchall()
 
-def spawnDriver(page: ft.Page):
-    userID = 1
+    
+    listOfDriversDropDown = ft.Dropdown(on_change=lambda e: page.update())
+    listOfDriversDropDown.label = "Driver"
+    driverOptions = []
+    for driver in listOfDrivers:
+        driverOptions.append(ft.dropdown.Option(text=driver['username'], data=driver['id']))
+
+    listOfDriversDropDown.options = driverOptions
+    listOfDriversDropDown.value = driverOptions[0].data
+    listOfLocationsDropDown = ft.Dropdown(on_change=lambda e: page.update())
+    listOfLocationsDropDown.label = "Destination"
+    locationOptions = []
+    for location in listOfLocations:
+        locationOptions.append(ft.dropdown.Option(text=location['name'], data=location['id']))
+    listOfLocationsDropDown.options = locationOptions
+    listOfLocationsDropDown.value = locationOptions[0].data
+
+    def constructAddressString(address):
+        addressString = ""
+        #only use name, locality, administrative_area, postal_code
+        if address['name_line'] != None:
+            addressString += address['name_line'] + "\n"
+        if address['locality'] != None:
+            addressString += address['locality'] + ", "
+        if address['administrative_area'] != None:
+            addressString += address['administrative_area'] + " "
+        if address['postal_code'] != None:
+            addressString += address['postal_code']
+        return addressString
+    
+
+    
+    def assignPackage(e):
+        selectedFacility = None
+        for location in listOfLocations:
+            if location['name'] == listOfLocationsDropDown.value:
+                selectedFacility = location["id"]
+        selectedUserID = ""
+        for driver in listOfDrivers:
+            if driver['username'] == listOfDriversDropDown.value:
+                selectedUserID = driver["id"]
+        mycursor.execute(f"DELETE FROM ready_for_assignment WHERE package_id = {e.control.data}")
+        mycursor.execute(f"INSERT INTO package_assignment (package_id, driver_id, from_facility_id, to_facility_id, status) VALUES ({e.control.data}, {selectedUserID}, {user['facility_id']}, {selectedFacility}, 1)")
+        mydb.commit()
+        for assignment in assignmentPanel.controls:
+            if assignment.title.controls[0].value == str(e.control.data):
+                assignmentPanel.controls.remove(assignment)
+        page.update()
+
+    def spawnHistory(e):
+        for package in packages:
+            addressString = ""
+            mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
+            address = mycursor.fetchone()
+            addressString = constructAddressString(address)
+            assignmentPanel.controls.append(ft.ExpansionTile(
+                title=ft.Row([
+                    ft.Text(str(package['package_id'])),
+                ]),
+                controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
+            ))
+
+        assignmentView.visible = True
+        page.update()
+
+    page.add(assignmentView)
+    spawnHistory(None)
+
+
+
+def spawnDriver(page: ft.Page, user):
+    inTheMiddleOfSomething = False
+    def constructAddressString(address):
+            addressString = ""
+            #only use name, locality, administrative_area, postal_code
+            if address['name_line'] != None:
+                addressString += address['name_line'] + "\n"
+            if address['locality'] != None:
+                addressString += address['locality'] + ", "
+            if address['administrative_area'] != None:
+                addressString += address['administrative_area'] + " "
+            if address['postal_code'] != None:
+                addressString += address['postal_code']
+            return addressString
+    def markAsDelivered(e, manualData = None):
+                if manualData == None:
+                    manualData = e.control.data
+                mycursor.execute(f"SELECT * FROM package_assignment WHERE package_id = {manualData}")
+                assignmentDetails = mycursor.fetchone()
+                mycursor.execute(f"SELECT * FROM package WHERE id = {manualData}")
+                packageDetails = mycursor.fetchone()
+                mycursor.execute(f"SELECT * FROM destination_address WHERE id = {manualData}")
+                address = mycursor.fetchone()
+                mycursor.execute(f"SELECT * FROM facilities WHERE id = {assignmentDetails['to_facility_id']}")
+                destinationFacilityName = mycursor.fetchone()['name']
+
+                def handle_delivery_conf(e):
+                    if e.control.text == "Yes":
+                        toFacilityID = assignmentDetails["to_facility_id"]
+                        if toFacilityID == 0:
+                            mycursor.execute("UPDATE package SET time_of_delivery = NOW() WHERE id = " + str(e.control.data))
+                        mycursor.execute(f"SELECT * FROM facilities WHERE id = {toFacilityID}")
+                        facility = mycursor.fetchone()
+                        status = facility["arrived_status_code"]
+                        mycursor.execute(f"SELECT * FROM status_info WHERE id = {status}")
+                        statusrow = mycursor.fetchone()
+                        locationName = facility["name"]
+                        if locationName == "Address":
+                            locationName = "Listed Address"
+                            
+                        
+                        mycursor.execute(f"Insert INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({e.control.data},{status}, NOW(), 0, 0, '{locationName}', {toFacilityID})")
+                        mycursor.execute(f"UPDATE package_assignment SET status = 3 WHERE package_id = {e.control.data}")
+                        mydb.commit()
+                    page.close(e.control.parent)
+                    page.update()
+                    if e.control.text == "Yes":
+                        time.sleep(.2)
+                        swapViews(1)
+                #
+                material_actions = [
+                    ft.TextButton(text="Yes", on_click=handle_delivery_conf, data=manualData),
+                    ft.TextButton(text="No", on_click=handle_delivery_conf, data=manualData),
+                    ]
+                page.open(ft.AlertDialog(
+                        title=ft.Text("Confirm Delivery"),
+                        content=ft.Text("Tracking number: " + displayIDProperly(str(manualData)) + "\n Package Address:\n" + constructAddressString(address) + "\n Destination Address:\n " + destinationFacilityName),
+                        actions=material_actions,
+                    ))
+    userID = user['id']
     def getLatestStatus(packageID):
         mycursor.execute(f"SELECT * FROM package_status WHERE package_id = {packageID} ORDER BY time_created DESC")
         return mycursor.fetchone()
     def markAllAsDelivered(e):
         def handle_mark_all(e):
             if e.control.text == "Yes":
-                mycursor.execute(f"UPDATE package_assignment SET status = 3 WHERE driver_id = {userID} and status = 4")
-                mydb.commit()
-            page.close(e.control.parent)
+                inTheMiddleOfSomething = True
+                mycursor.execute(f"SELECT * FROM package_assignment WHERE driver_id = {userID} and status = 2")
+                packagesToDeliver = mycursor.fetchall()
+                page.close(e.control.parent)
+                for package in packagesToDeliver:
+                    markAsDelivered(None, manualData=package['package_id'])
+                inTheMiddleOfSomething = False
+                swapViews(1)
         #popup to confirm
         material_actions = [
         ft.TextButton(text="Yes", on_click=handle_mark_all),
@@ -121,20 +283,10 @@ def spawnDriver(page: ft.Page):
     
 
     def swapViews(e = None):
+        if inTheMiddleOfSomething:
+            return
         
         deliveryPanel = ft.ExpansionPanelList(controls=[])
-        def constructAddressString(address):
-            addressString = ""
-            #only use name, locality, administrative_area, postal_code
-            if address['name_line'] != None:
-                addressString += address['name_line'] + "\n"
-            if address['locality'] != None:
-                addressString += address['locality'] + ", "
-            if address['administrative_area'] != None:
-                addressString += address['administrative_area'] + " "
-            if address['postal_code'] != None:
-                addressString += address['postal_code']
-            return addressString
         if e == None or e == 0:
             index = 0
         elif e == 1:
@@ -143,6 +295,7 @@ def spawnDriver(page: ft.Page):
             index = e.control.selected_index
         #Logic for loading view
         if index == 0:
+
             mycursor.execute(f"SELECT * FROM package_assignment WHERE driver_id = {userID} and status = 1")
             page.clean()
             packagesAvaliableToDeliver = mycursor.fetchall()
@@ -150,15 +303,14 @@ def spawnDriver(page: ft.Page):
                 page.add(ft.Text("You have no packages assigned to you."))
                 page.update()
                 return
-            print (packagesAvaliableToDeliver)
             loadContainerContents = []
             checkboxes = []
             def loadMarkedPackages(e):
                 for checkbox in checkboxes:
                     if checkbox.value:
-                        mycursor.execute(f"SELECT * FROM package_assignment WHERE package_id = {checkbox.label}")
+                        mycursor.execute(f"SELECT * FROM package_assignment WHERE package_id = {checkbox.data}")
                         package = mycursor.fetchone()
-                        mycursor.execute(f"SELECT * FROM package WHERE id = {checkbox.label}")
+                        mycursor.execute(f"SELECT * FROM package WHERE id = {checkbox.data}")
                         packageInfo = mycursor.fetchone()
                         if (package['to_facility_id'] == 0):
                             """Create Table package_status (
@@ -183,60 +335,26 @@ def spawnDriver(page: ft.Page):
                             mycursor.execute(f"SELECT * FROM facilities WHERE id = {package['from_facility_id']}")
                             facility = mycursor.fetchone()
                             nextStatus = facility["departed_status_code"]
-                            print (nextStatus)
-                            print("running this")
                             mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package['package_id']}, {nextStatus}, NOW(),0 , 0, '{facility["name"]}', {lastID})")
                             mydb.commit()
-                        mycursor.execute(f"UPDATE package_assignment SET status = 2 WHERE package_id = {checkbox.label}")
+                        mycursor.execute(f"UPDATE package_assignment SET status = 2 WHERE package_id = {checkbox.data}")
                         mydb.commit()
                 swapViews(0)
             for package in packagesAvaliableToDeliver:
-                checkboxes.append(ft.Checkbox(label=f"{package['package_id']}"))
+                print(package)
+                destinationSTR = ""
+                if package['to_facility_id'] == 0:
+                    destinationSTR = "Final Destination"
+                else:
+                    mycursor.execute(f"SELECT * FROM facilities WHERE id = {package['to_facility_id']}")
+                    destinationSTR = mycursor.fetchone()['name']
+                checkboxes.append(ft.Checkbox(label=displayIDProperly(str(package['package_id'])) + "     Destination: " + destinationSTR, data=package['package_id']))
             loadContainerContents.append(ft.Column(checkboxes))
             loadContainerContents.append(ft.FilledTonalButton("Load", on_click=loadMarkedPackages))
             page.add(ft.Column(loadContainerContents))
             page.update()
         #Logic for delivery view
         else:
-            def markAsDelivered(e):
-                mycursor.execute(f"SELECT * FROM package_assignment WHERE package_id = {e.control.data}")
-                assignmentDetails = mycursor.fetchone()
-                mycursor.execute(f"SELECT * FROM package WHERE id = {e.control.data}")
-                packageDetails = mycursor.fetchone()
-                mycursor.execute(f"SELECT * FROM destination_address WHERE id = {e.control.data}")
-                address = mycursor.fetchone()
-                def handle_delivery_conf(e):
-                    if e.control.text == "Yes":
-                        toFacilityID = assignmentDetails["to_facility_id"]
-                        mycursor.execute(f"SELECT * FROM facilities WHERE id = {toFacilityID}")
-                        facility = mycursor.fetchone()
-                        print (facility)
-                        status = facility["arrived_status_code"]
-                        mycursor.execute(f"SELECT * FROM status_info WHERE id = {status}")
-                        statusrow = mycursor.fetchone()
-                        locationName = facility["name"]
-                        if locationName == "Address":
-                            locationName = "Listed Address"
-                            
-                        
-                        mycursor.execute(f"Insert INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({e.control.data},{status}, NOW(), 0, 0, '{locationName}', {toFacilityID})")
-                        mycursor.execute(f"UPDATE package_assignment SET status = 3 WHERE package_id = {e.control.data}")
-                        mydb.commit()
-                    page.close(e.control.parent)
-                    page.update()
-                    if e.control.text == "Yes":
-                        time.sleep(.2)
-                        swapViews(1)
-                #
-                material_actions = [
-                    ft.TextButton(text="Yes", on_click=handle_delivery_conf, data=e.control.data),
-                    ft.TextButton(text="No", on_click=handle_delivery_conf, data=e.control.data),
-                    ]
-                page.open(ft.AlertDialog(
-                        title=ft.Text("Confirm Delivery"),
-                        content=ft.Text("Tracking number: " + str(e.control.data) + "\n " + constructAddressString(address)),
-                        actions=material_actions,
-                    ))
             def unload(e):
                 mycursor.execute(f"UPDATE package_assignment SET status = 1 WHERE package_id = {e.control.data}")
                 mydb.commit()
@@ -249,12 +367,24 @@ def spawnDriver(page: ft.Page):
                 page.add(ft.Text("You have not loaded any packages.\n Please select the load tab to load packages to deliver."))
                 page.update()
                 return
+            
             for package in packagesToDeliver:
+                 addressToWrite = ""
+                 if (package['to_facility_id'] != 0):
+                    mycursor.execute(f"SELECT * from facilities WHERE id = {package['to_facility_id']}")
+                    facility = mycursor.fetchone()
+                    mycursor.execute(f"SELECT * FROM destination_address WHERE id = {facility['address_id']}")
+                    address = mycursor.fetchone()
+                    addressToWrite = constructAddressString(address)
+                 else:
+                    mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
+                    addressToWrite = constructAddressString(mycursor.fetchone())
                  deliveryPanel.controls.append(ft.ExpansionPanel(
                     header=ft.Row([
-                        ft.Text(str(package['package_id'])),
+                        ft.Text(str(displayIDProperly(str(package['package_id'])))),
                     ]),
-                    content=ft.Column([ft.Text("Details: "), ft.Button("Mark as delivered", data=package['package_id'], on_click=markAsDelivered), ft.Button("Unload", on_click = unload, data=package['package_id'])]),
+                    can_tap_header=True,
+                    content=ft.Column([ft.Text("Deliver to: "), ft.Text(addressToWrite), ft.Button("Mark as delivered", data=package['package_id'], on_click=markAsDelivered), ft.Button("Unload", on_click = unload, data=package['package_id'])]),
                 ))
             
            
@@ -283,6 +413,11 @@ def spawnDriver(page: ft.Page):
 
 def spawnClerk(page: ft.Page, user):
     page.scroll = True
+    userLocationID = user['facility_id']
+    #get facility info
+    mycursor.execute(f"SELECT * FROM facilities WHERE id = {userLocationID}")
+    facility = mycursor.fetchone()
+
     #page to enter in package info. 
     """CREATE TABLE package (
     id INT PRIMARY KEY,
@@ -327,7 +462,7 @@ def spawnClerk(page: ft.Page, user):
         mycursor.execute("SELECT MAX(id) FROM package")
         return mycursor.fetchone()['MAX(id)'] + 1
     def displayIDProperly(id):
-        return str(id) + str(id[0]+id[1]+id[2]+id[3]+id[4]+id[5]+id[6]+id[7]+id[8]+id[9])[-2:].zfill(2)
+        return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
     #get insurance types from insuranceType
     mycursor.execute("SELECT * FROM insurance_type")
     insuranceTypes = mycursor.fetchall()
@@ -342,7 +477,8 @@ def spawnClerk(page: ft.Page, user):
     dimensionDropDown.label = "unit"
     dimensionTypeOptions.append(ft.dropdown.Option(text="IN", data=2.54, key=0))
     dimensionTypeOptions.append(ft.dropdown.Option(text="FT", data=30.48, key=1))
-    dimensionTypeOptions.append(ft.dropdown.Option(text="CM", data=0, key=2))
+    dimensionTypeOptions.append(ft.dropdown.Option(text="CM", data=1, key=2))
+    lengthKey = {0: "2.54", 1: "30.48", 2: "1"}
     dimensionDropDown.options = dimensionTypeOptions
     dimensionDropDown.value = 0
 
@@ -359,44 +495,106 @@ def spawnClerk(page: ft.Page, user):
     insuranceDropDown.options = insuranceTypeOptions
     packageWidthString = ft.Text("Dimensions: ")
     packageDimensionsSeperator = ft.Text(" x ")
-    packageWidthField = ft.TextField(label="W", width=40)
-    packageLengthField = ft.TextField(label="L", width=40)
-    packageHeightField = ft.TextField(label="H", width=40)
+    packageWidthField = ft.TextField(label="W", width=80,input_filter = ft.InputFilter('^[0-9]*$'), max_length=3)
+    packageLengthField = ft.TextField(label="L", width=80,input_filter = ft.InputFilter('^[0-9]*$'), max_length=3)
+    packageHeightField = ft.TextField(label="H", width=80,input_filter = ft.InputFilter('^[0-9]*$'), max_length=3)
     
     packageWeightString = ft.Text("Weight: ")
-    packageWeightField = ft.TextField()
-    packageTypeString = ft.Text("Shipment Type:")
-    packageTypeField = ft.TextField()
+    packageWeightField = ft.TextField(input_filter = ft.InputFilter('^[0-9]*$'), max_length=5, width=80)
+    packageWeightUnit = ft.Text("oz")
     packageInsuranceString = ft.Text("Insurance Type: ")
     packageInsuranceField = insuranceDropDown
     packageShipmentString = ft.Text("Shipment Type: ")
     packageShipmentField = shipmentDropDown
 
     packageFirstNameString = ft.Text("First Name: ")
-    packageFirstNameField = ft.TextField()
+    packageFirstNameField = ft.TextField(max_length=50)
     packageLastNameString = ft.Text("Last Name: ")
-    packageLastNameField = ft.TextField()
+    packageLastNameField = ft.TextField(max_length=50)
     packageOrganisationString = ft.Text("Organisation: ")
-    packageOrganisationField = ft.TextField()
+    packageOrganisationField = ft.TextField(max_length=255)
     packageAdminAreaString = ft.Text("Administrative Area: ")
-    packageAdminAreaField = ft.TextField()
+    packageAdminAreaField = ft.TextField(max_length=50)
     packageLocalityString = ft.Text("Locality: ")
-    packageLocalityField = ft.TextField()
+    packageLocalityField = ft.TextField(max_length=50)
     packagePostalCodeString = ft.Text("Postal Code: ")
-    packagePostalCodeField = ft.TextField()
+    packagePostalCodeField = ft.TextField(max_length=50)
     packageThoroughfareString = ft.Text("Thoroughfare: ")
-    packageThoroughfareField = ft.TextField()
+    packageThoroughfareField = ft.TextField(max_length=255)
     packagePremiseString = ft.Text("Premise: ")
-    packagePremiseField = ft.TextField()
-    packageSubPremiseString = ft.Text("Sub Premise: ")
-    packageSubPremiseField = ft.TextField()
+    packagePremiseField = ft.TextField(max_length=255)
     packageCountryString = ft.Text("Country: ")
-    packageCountryField = ft.TextField()
+    packageCountryField = ft.TextField(max_length = 2)
     packageDeclaredValueString = ft.Text("Declared Value: ")
-    packageDeclaredValueField = ft.TextField()
+    packageDeclaredValueField = ft.TextField(input_filter=ft.InputFilter('^[0-9]*$'), max_length=10)
 
+    def addPackageTransaction(event):
+        
+        calculatedDistance = 500
+        id = generateid()
+        shipmentCost = 0
+        shipmentTypeID = 0 
+        shipmentID = packageShipmentField.value
+        shipmentETA = 0
+        for shipmentType in shipmentTypes:
+            if shipmentType['name'] == shipmentID:
+                shipmentTypeID = shipmentType['id']
+                shipmentETA = float(shipmentType['days_per500Miles']) * calculatedDistance
+                shipmentCost = shipmentType['cost_per500Miles']
+        
+        width = float(packageWidthField.value) * float(lengthKey[dimensionDropDown.value])
+        length = float(packageLengthField.value) * float(lengthKey[dimensionDropDown.value])
+        height = float(packageHeightField.value) * float(lengthKey[dimensionDropDown.value])
+        weight = float(packageWeightField.value) * 28.3495
+        insuranceID = packageInsuranceField.value
+        insuranceID = None
+        insuranceIDFinal = 0
+        for insuranceType in insuranceTypes:
+            if insuranceType['id'] == insuranceID:
+                insuranceIDFinal = insuranceType['id']
+        shipmentID = packageShipmentField.value
+        firstName = packageFirstNameField.value
+        lastName = packageLastNameField.value
+        organisation = packageOrganisationField.value
+        adminArea = packageAdminAreaField.value
+        locality = packageLocalityField.value
+        postalCode = packagePostalCodeField.value
+        thoroughfare = packageThoroughfareField.value
+        premise = packagePremiseField.value
+        country = packageCountryField.value
+        declaredValue = packageDeclaredValueField.value
+        mycursor.execute(f"INSERT INTO package (id, width, length, height, weight, price, type, insurance_id, shipment_id, estimated_distance, estimated_time_from_dispatch, time_created, time_updated, delivery_cordinates_x, delivery_cordinates_y, delivery_conformation) VALUES ({id}, {width}, {length},  {height}, {weight}, {shipmentCost}, 0, NULL, {shipmentTypeID}, {calculatedDistance}, {shipmentETA} , NOW(), NOW(), 42.4532, -79.3407, '')")
+        
+        mycursor.execute(f"INSERT INTO destination_address (id, country, name_line, first_name, last_name, organisation_name, administrative_area, locality, postal_code, thoroughfare, premise) VALUES ({id}, '{country}', '{firstName} {lastName}', '{firstName}', '{lastName}', '{organisation}', '{adminArea}', '{locality}', '{postalCode}', '{thoroughfare}', '{premise}')")
+        if insuranceIDFinal != 0:
+            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, 0, {declaredValue})")
+        
+        mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({id}, 1, NOW(), 0, 0, \"{facility["name"]}\", {user["facility_id"]})")
+        mycursor.execute(f"INSERT INTO ready_for_assignment (package_id, time_created, location) VALUES ({id}, NOW(), {user["facility_id"]})")
+        mydb.commit()
+        page.close(event.control.parent)
+        #popup with tracking number
+        material_actions = [
+            ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)), ft.TextButton(text="Copy Tracking Number", on_click=lambda e: page.set_clipboard(displayIDProperly(str(id)))),
+            ]
+        page.open(ft.AlertDialog(
+            title=ft.Text("Package Added"),
+            content=ft.Text("Tracking Number: " + displayIDProperly(str(id))),
+            actions=material_actions,
+        ))
 
     def generateEstimate(event):
+        #check that all boxes are filled that are required
+        if packageWidthField.value == "" or packageLengthField.value == "" or packageHeightField.value == "" or packageWeightField.value == "" or packageShipmentField.value == "" or packageFirstNameField.value == "" or packageLastNameField.value == "" or packageAdminAreaField.value == "" or packageLocalityField.value == "" or packagePostalCodeField.value == "" or packageThoroughfareField.value == "" or packageCountryField.value == "":
+            material_actions = [
+                ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)),
+                ]
+            page.open(ft.AlertDialog(
+                title=ft.Text("Error"),
+                content=ft.Text("Please fill out all required fields."),
+                actions=material_actions,
+            ))
+            return
         calculatedDistance = 500 #this would be calculated based on address and route, but it is out of scope. 
         #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time. 
         #get the insurance cost
@@ -405,7 +603,6 @@ def spawnClerk(page: ft.Page, user):
         for insuranceType in insuranceTypes:
             if generateInsuranceTypeString(insuranceType) == insuranceID:
                 insuranceCost = insuranceType['cost_per500Miles']
-        print(insuranceCost)
         for insuranceType in insuranceTypes:
             if insuranceType['id'] == insuranceID:
                 insuranceCost = insuranceType['cost_per500Miles']
@@ -413,8 +610,10 @@ def spawnClerk(page: ft.Page, user):
         shipmentCost = 0
         shipmentID = packageShipmentField.value
         for shipmentType in shipmentTypes:
-            if shipmentType['id'] == shipmentID:
+            if shipmentType['name'] == shipmentID:
                 shipmentCost = shipmentType['cost_per500Miles']
+
+        
         #get the total cost
         totalCost = insuranceCost + shipmentCost
         #get the estimated time
@@ -427,18 +626,31 @@ def spawnClerk(page: ft.Page, user):
         #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time.
         material_actions = [
             ft.TextButton(text="Cancel", on_click=lambda e: page.close(e.control.parent)),
-            ft.TextButton(text="Process"),
+            ft.TextButton(text="Process", on_click=addPackageTransaction),
         ]
         page.open(ft.AlertDialog(
             title=ft.Text("Estimated Costs"),
             content=ft.Text("Estimated Distance: " + str(calculatedDistance) + " miles\n" + "Estimated Insurance Cost: $" + str(insuranceCost) + "\nEstimated Shipment Cost: $" + str(shipmentCost) + "\nTotal Cost: $" + str(totalCost) + "\nEstimated Time: " + str(estimatedTime) + " days"),
             actions=material_actions,
         ))
-
+    def checkAdditionalOptions(event):
+        if packageInsuranceField.value != "None" or None:
+            #make sure there's a declared value
+            if packageDeclaredValueField.value == "":
+                material_actions = [
+                    ft.TextButton(text="Close", on_click=spawnAdditionalOptions),
+                    ]
+                page.open(ft.AlertDialog(
+                    title=ft.Text("Error"),
+                    content=ft.Text("Please enter a declared value."),
+                    actions=material_actions,
+                ))
+                return
+        page.close(event.control.parent)
     def spawnAdditionalOptions(event):
         #popup with insurance options
         material_actions = [
-            ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)),
+            ft.TextButton(text="Close", on_click=checkAdditionalOptions ),
             ]
         page.open(ft.AlertDialog(
             title=ft.Text("Additional Options"),
@@ -457,7 +669,7 @@ def spawnClerk(page: ft.Page, user):
     inputContainer = ft.Column(
         [
             ft.Row([packageWidthString, packageWidthField, packageDimensionsSeperator, packageLengthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
-            ft.Row([packageTypeString, packageTypeField]),
+            ft.Row([packageWeightString, packageWeightField, packageWeightUnit]),
             ft.Row([packageShipmentString, packageShipmentField]),
             ft.Row([packageFirstNameString, packageFirstNameField]),
             ft.Row([packageLastNameString, packageLastNameField]),
@@ -468,17 +680,12 @@ def spawnClerk(page: ft.Page, user):
             ft.Row([packagePostalCodeString, packagePostalCodeField]),
             ft.Row([packageThoroughfareString, packageThoroughfareField]),
             ft.Row([packagePremiseString, packagePremiseField]),
-            ft.Row([packageSubPremiseString, packageSubPremiseField]),
             ft.Row([packageCountryString, packageCountryField]),\
             additionalInfoButton,
             packageProcessButton
         ],
     )
     page.add(inputContainer)
-    
-
-    
-        
 
 
 ft.app(main, view=ft.AppView.WEB_BROWSER)
