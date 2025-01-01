@@ -596,6 +596,8 @@ def spawnClerk(page: ft.Page, user):
             if insuranceType['id'] == insuranceID:
                 insuranceRow = insuranceType
                 insuranceIDFinal = insuranceType['id']
+
+        
         if insuranceIDFinal != 0:
             insuranceCost = float(insuranceRow['cost_per500Miles']) * (calculatedDistance/500)
 
