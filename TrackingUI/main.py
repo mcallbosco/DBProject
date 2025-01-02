@@ -55,6 +55,8 @@ connected = False
 #init sql connection
 
 def main(page: ft.Page):
+    global connected
+    page.on_connect = lambda e: redo(page)
     redo(page)
 
 
