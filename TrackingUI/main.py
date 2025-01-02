@@ -55,10 +55,16 @@ connected = False
 #init sql connection
 
 def main(page: ft.Page):
-    redo(page)
+    global connected
+    page.on_connect = lambda e: redo(page)
+    
+    if connected == False:
+        connected = True
+        redo(page)
 
 
 def redo(page: ft.Page):
+    print("Visit")
     page.navigation_bar = None
     
     page.clean()
