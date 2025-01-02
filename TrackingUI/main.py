@@ -760,7 +760,9 @@ def spawnDriver(page: ft.Page, user):
                             lastStatus = getLatestStatus(package['package_id'])
                             statusX = lastStatus['location_x']
                             statusY = lastStatus['location_y']
-                            mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package['package_id']}, 11, NOW(),{statusX} , {statusY}, '{lastStatus["location_name"]}', 0)")
+                            package_id = package['package_id']
+                            location_name = lastStatus["location_name"]
+                            mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package_id}, 11, NOW(), {statusX}, {statusY}, '{location_name}', 0)")
                             mydb.commit()
                         else:
                             #left facility.
