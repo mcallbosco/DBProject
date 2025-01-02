@@ -458,6 +458,10 @@ def spawnLogin(page: ft.Page):
                     page.remove(loginPage)
                     spawnClerk(page, user)
                 case _:
+                    txt_invalid.value = "Invalid Username or Password"
+                    txtf_password.border_color = ft.colors.RED
+                    txtf_username.border_color = ft.colors.RED
+                    page.update()
         else:
             txt_invalid.value = "Invalid Username or Password"
             txtf_password.border_color = ft.colors.RED
