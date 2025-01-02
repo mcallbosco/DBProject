@@ -18,9 +18,10 @@ mycursor.execute("USE shipping")
 def main(page: ft.Page):
     page.title = cCode + "Login"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     spawnLogin(page)
+
+
 def displayIDProperly(id):
         return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
 

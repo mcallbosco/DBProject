@@ -2,6 +2,8 @@ import flet as ft
 from flet import TemplateRoute
 import mysql.connector
 import random
+import os
+import json
 
 import math
 import flet.map as map
@@ -22,17 +24,29 @@ smallWeightConversion = 0.035274
 cubicConversion = 0.0000353147
 dimensionConversion = 0.393701
 
-mydb = mysql.connector.connect(
-        host="localhost",
-        port="3307",
-        user= "root",
-        password="RaNSEneyHYrO",
-    )
+#load MYSQLCREDS.JSON file
+
+if os.path.exists("MYSQLCREDS.JSON"):
+    with open("MYSQLCREDS.JSON") as f:
+        data = json.load(f)
+        mydb = mysql.connector.connect(
+            host=data["host"],
+            port=data["port"],
+            user= data["user"],
+            password=data["password"],
+        )
+else:
+    print("MYSQLCREDS.JSON file not found")
+    print("Look at MYSQLCREDS.JSON for an example")
+    exit()
+    
 mycursor = mydb.cursor(buffered=True,dictionary=True)
 marker_layer_ref = ft.Ref[map.MarkerLayer]()
 mycursor.execute("USE shipping")
 mycursor.execute("SELECT * FROM status_info;")
 status_info = mycursor.fetchall()
+
+connected = False
 
 #tracking number specification
 #first 10 digits are the package number
@@ -40,8 +54,21 @@ status_info = mycursor.fetchall()
 #The last 2 numbers are not stored in the database, they are only used to verify the number before checking serverside. 
 #init sql connection
 
-
 def main(page: ft.Page):
+    global connected
+    page.on_connect = lambda e: redo(page)
+    if connected == False:
+        connected = True
+        redo(page)
+
+
+def redo(page: ft.Page):
+    page.navigation_bar = None
+    
+    page.clean()
+    #close any open dialogs
+    while page.overlay:
+        page.overlay.clear()
     screenWidth = page.width
     global map_container
     
@@ -91,6 +118,7 @@ def main(page: ft.Page):
     packageDispatchDateValue = ft.Text("")
     insuredString = ft.Text("Insured: ")
     insuredValue = ft.Text("")
+    packageDispatchRow = ft.Row([packageDispatchDate, packageDispatchDateValue], visible=False)
 
     searchResultsView2 = ft.Column(
         [
@@ -98,7 +126,7 @@ def main(page: ft.Page):
             ft.Row([packageDemensionString, packageDemensionValue, packageDemensionValueCubic]),\
             ft.Row([packageWeightString, packageWeightValue]),\
             ft.Row([packageCreationDate, packageCreationDateValue]),\
-            ft.Row([packageDispatchDate, packageDispatchDateValue]),\
+            packageDispatchRow,\
             ft.Row([insuredString, insuredValue])
 
         ],
@@ -190,15 +218,13 @@ def main(page: ft.Page):
             
 
     def route_change(route):
-        print("test")
         global map_container
         #checks
         routeStripped = route.data[1:]
-        print (routeStripped)
-        print (route.data)
         if not checkTracking(routeStripped) and doInitialFormatCheck or route.data == "/":
             return
         routeStripped = routeStripped[0:10]
+        packageIDInternal = str(int(routeStripped))
 
         mycursor.execute("SELECT * FROM package WHERE id = " + str(int(routeStripped)) + ";")
         myresult = mycursor.fetchall()
@@ -210,6 +236,7 @@ def main(page: ft.Page):
             #history logic
             mycursor.execute("SELECT * FROM status_info;")
             statusResults = mycursor.fetchall()
+            
             mycursor.execute("SELECT * FROM package_status WHERE package_id = " + str(int(routeStripped)) + ";")
             historyResults = mycursor.fetchall()
             historyPanel.controls.clear()
@@ -237,11 +264,10 @@ def main(page: ft.Page):
                 packageWeightValue.value = str(weightInOz) + smallWeightUnit
             else:
                 packageWeightValue.value = str(int(weightInOz/16)) + weightUnit + " " + str(math.ceil(weightInOz % 16)) + smallWeightUnit
-            insuranceInfo = myresult[0]["insurance_id"]
+            mycursor.execute(f"SELECT * FROM insurance WHERE id = {packageIDInternal};")
+            insuranceInfo = mycursor.fetchall()
             if insuranceInfo:
-                mycursor.execute("SELECT * FROM insurance WHERE id = " + str(insuranceInfo) + ";")
-                insuranceResult = mycursor.fetchall()
-                insuranceValue = insuranceResult[0]["value_coverage"]
+                insuranceValue = insuranceInfo[0]["value_coverage"]
                 insuredValue.value = "Yes, up to $" + str(insuranceValue)
             else:
                 insuredValue.value = "No"
@@ -251,11 +277,16 @@ def main(page: ft.Page):
             else:
                 prettyDispatch = ""
                 #for the days elapsed use  creation time - system time
-            daydiff = (myresult[0]["time_created"] - datetime.datetime.now()).days + 1
-            
+            daydiff = (myresult[0]["time_created"] - datetime.datetime.now()).days
             if daydiff < 0:
                 daydiff = 0
-            print (historyResults)
+            shippingTime = myresult[0]["estimated_time_from_dispatch"]
+            shippingTime =  shippingTime - daydiff
+            if shippingTime < 0:
+                shippingTime = 0
+            daydiff = shippingTime
+
+            
             progressBar.value = calculatePersentageBar(historyResults, daydiff, myresult[0]["estimated_time_from_dispatch"])
             if delivered:
                 progressBar.value = 1
@@ -317,15 +348,10 @@ def main(page: ft.Page):
 
             packageCreationDateValue.value = prettyCreation
             if prettyDispatch != "":
-                packageDispatchDateValue.visible = True
+                packageDispatchRow.visible = True
                 packageDispatchDateValue.value = prettyDispatch
             else:
-                packageDispatchDateValue.visible = False
-            
-
-
-            
-
+                packageDispatchRow.visible = False
             page.update()
         
 
@@ -353,9 +379,10 @@ def main(page: ft.Page):
 
     
     def clearColor(e):
-        txti_tracking.border_color = ft.colors.GREY_500
-        errorMessage.visible = False
-        page.update()
+        if txti_tracking.border_color == ft.colors.RED:
+            txti_tracking.border_color = ft.colors.GREY_500
+            errorMessage.visible = False
+            page.update()
 
     txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback)
     txti_tracking.width = page.width * 0.8
@@ -381,10 +408,13 @@ def main(page: ft.Page):
     
     loginButton = ft.FilledTonalButton("Login")
     loginButton.on_click = lambda e: spawnLogin(page)
-    howToUseButton = ft.FilledTonalButton("How to use")
-    #Go to link ""
-    howToUseButton.on_click = 
-    page.add(loginButton)
+    howToUseButton = ft.FilledTonalButton("How to use", url="https://github.com/mcallbosco/DBProject/blob/main/OnlineDemoREADME.md")
+
+
+    #create a row with the login and how to use button, have the how to use align to the left and the login align to the right
+    topButtonRow = ft.Row ([howToUseButton, loginButton], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    
+    page.add(topButtonRow)
     page.add(searchBarView)
     page.add (progressBarView)
     page.add(beingDeliveredText)
@@ -394,6 +424,7 @@ def main(page: ft.Page):
     page.on_route_change = route_change
     page.go(page.route)
     page.scroll = True
+    txti_tracking.focus()
 
 def displayIDProperly(id):
         return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
@@ -427,7 +458,6 @@ def spawnLogin(page: ft.Page):
                     page.remove(loginPage)
                     spawnClerk(page, user)
                 case _:
-                    print("Unimplimented user type")
         else:
             txt_invalid.value = "Invalid Username or Password"
             txtf_password.border_color = ft.colors.RED
@@ -497,7 +527,6 @@ def spawnManager(page: ft.Page, user):
                     controls=[
                         assignmentPanel
                     ],
-                    
                     expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
     listOfDrivers = []
     mycursor.execute(f"SELECT * FROM accounts WHERE roll = 'Driver' and facility_id = {user['facility_id']}")
@@ -505,8 +534,6 @@ def spawnManager(page: ft.Page, user):
     listOfLocations = []
     mycursor.execute(f"SELECT * FROM facilities")
     listOfLocations = mycursor.fetchall()
-
-    
     listOfDriversDropDown = ft.Dropdown(on_change=lambda e: page.update())
     listOfDriversDropDown.label = "Driver"
     driverOptions = []
@@ -565,14 +592,14 @@ def spawnManager(page: ft.Page, user):
         mycursor.execute(f"UPDATE package SET time_of_dispatch = NOW() WHERE id = {e.control.data}")
         mydb.commit()
         for assignment in assignmentPanel.controls:
-            print (assignment.title.controls[0].value)
-            print (e.control.data)
             if assignment.title.controls[0].value == str(displayIDProperly(str(e.control.data))):
                 assignmentPanel.controls.remove(assignment)
         page.update()
 
     def spawnHistory(e):
+        packageCounter = 0
         for package in packages:
+            packageCounter += 1
             addressString = ""
             mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
             address = mycursor.fetchone()
@@ -583,7 +610,8 @@ def spawnManager(page: ft.Page, user):
                 ]),
                 controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
             ))
-
+        if packageCounter == 0:
+            assignmentPanel.controls.append(ft.Text("No packages to assign."))
         assignmentView.visible = True
         page.update()
 
@@ -739,11 +767,10 @@ def spawnDriver(page: ft.Page, user):
                             nextStatus = facility["departed_status_code"]
                             mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package['package_id']}, {nextStatus}, NOW(),0 , 0, '{facility["name"]}', {lastID})")
                             mydb.commit()
-                        mycursor.execute(f"UPDATE package_assignment SET status = 2 WHERE package_id = {checkbox.data}")
+                        mycursor.execute(f"UPDATE package_assignment SET status = 2 WHERE package_id = {checkbox.data} and driver_id = {userID}")
                         mydb.commit()
                 swapViews(0)
             for package in packagesAvaliableToDeliver:
-                print(package)
                 destinationSTR = ""
                 if package['to_facility_id'] == 0:
                     destinationSTR = "Final Destination"
@@ -758,7 +785,13 @@ def spawnDriver(page: ft.Page, user):
         #Logic for delivery view
         else:
             def unload(e):
+                #get arrival for current facility
+                mycursor.execute(f"SELECT * FROM facilities WHERE id = {user['facility_id']}")
+                facility = mycursor.fetchone()
+                arrivedStatus = facility['arrived_status_code']
+                facilityName = facility['name']
                 mycursor.execute(f"UPDATE package_assignment SET status = 1 WHERE package_id = {e.control.data} and driver_id = {userID} and status = 2")
+                mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({e.control.data}, {arrivedStatus}, NOW(), 0, 0, \"{facilityName}\", {user['facility_id']})")
                 mydb.commit()
                 swapViews(1)
             
@@ -858,7 +891,7 @@ def spawnClerk(page: ft.Page, user):
     );"""
     page.title = "Clerk"
     def generateInsuranceTypeString(insuranceType):
-        return insuranceType['name'] + " $" + "max: $" + str(insuranceType['max_coverage'])
+        return insuranceType['name'] + "\n" + "Max Coverage: $" + str(insuranceType['max_coverage'])
     def generateid():
         mycursor.execute("SELECT MAX(id) FROM package")
         return mycursor.fetchone()['MAX(id)'] + 1
@@ -949,7 +982,7 @@ def spawnClerk(page: ft.Page, user):
         page.update()
     def addPackageTransaction(event):
         
-        calculatedDistance = 500
+        calculatedDistance = 1500
         id = generateid()
         shipmentCost = 0
         shipmentTypeID = 0 
@@ -958,20 +991,21 @@ def spawnClerk(page: ft.Page, user):
         for shipmentType in shipmentTypes:
             if shipmentType['name'] == shipmentID:
                 shipmentTypeID = shipmentType['id']
-                shipmentETA = float(shipmentType['days_per500Miles']) * calculatedDistance
+                shipmentETA = float(shipmentType['days_per500Miles']) * (calculatedDistance/500)
                 shipmentCost = shipmentType['cost_per500Miles']
         width = float(packageWidthField.value) * float(lengthKey[str(dimensionDropDown.value)])
         length = float(packageLengthField.value) * float(lengthKey[str(dimensionDropDown.value)])
         height = float(packageHeightField.value) * float(lengthKey[str(dimensionDropDown.value)])
         weight = float(packageWeightField.value) * 28.3495
         insuranceID = packageInsuranceField.value
-        insuranceID = None
         insuranceIDFinal = 0
         insuranceRow = None
+        insuranceCost = 0
         for insuranceType in insuranceTypes:
-            if insuranceType['id'] == insuranceID:
-                insuranceRow = insuranceType
+            if generateInsuranceTypeString(insuranceType) == insuranceID:
                 insuranceIDFinal = insuranceType['id']
+                insuranceRow = insuranceType
+
 
         
         if insuranceIDFinal != 0:
@@ -992,7 +1026,7 @@ def spawnClerk(page: ft.Page, user):
         
         mycursor.execute(f"INSERT INTO destination_address (id, country, name_line, first_name, last_name, organisation_name, administrative_area, locality, postal_code, thoroughfare, premise) VALUES ({id}, '{country}', '{firstName} {lastName}', '{firstName}', '{lastName}', '{organisation}', '{adminArea}', '{locality}', '{postalCode}', '{thoroughfare}', '{premise}')")
         if insuranceIDFinal != 0:
-            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, insuranceCost, {declaredValue})")
+            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, {insuranceCost}, {declaredValue})")
         
         mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({id}, 1, NOW(), 0, 0, \"{facility["name"]}\", {user["facility_id"]})")
         mycursor.execute(f"INSERT INTO ready_for_assignment (package_id, time_created, location) VALUES ({id}, NOW(), {user["facility_id"]})")
@@ -1025,16 +1059,13 @@ def spawnClerk(page: ft.Page, user):
                 actions=material_actions,
             ))
             return
-        calculatedDistance = 500 #this would be calculated based on address and route, but it is out of scope. 
+        calculatedDistance = 1500 #this would be calculated based on address and route, but it is out of scope. 
         #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time. 
         #get the insurance cost
         insuranceCost = 0
         insuranceID = packageInsuranceField.value
         for insuranceType in insuranceTypes:
             if generateInsuranceTypeString(insuranceType) == insuranceID:
-                insuranceCost = float(insuranceType['cost_per500Miles']) * (calculatedDistance/500)
-        for insuranceType in insuranceTypes:
-            if insuranceType['id'] == insuranceID:
                 insuranceCost = float(insuranceType['cost_per500Miles']) * (calculatedDistance/500)
         #get the shipment cost
         shipmentCost = 0
@@ -1049,7 +1080,7 @@ def spawnClerk(page: ft.Page, user):
         #get the estimated time
         estimatedTime = 0
         for shipmentType in shipmentTypes:
-            if shipmentType['id'] == shipmentID:
+            if shipmentType['name'] == shipmentID:
                 estimatedTime = float(shipmentType['days_per500Miles']) * (calculatedDistance/500)
 
         if estimatedTime == 0:
@@ -1101,6 +1132,7 @@ def spawnClerk(page: ft.Page, user):
 
     inputContainer = ft.Column(
         [
+            ft.Row([ft.Text(" ")]),
             ft.Row([packageWidthString, packageWidthField, packageDimensionsSeperator, packageLengthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
             ft.Row([packageWeightString, packageWeightField, packageWeightUnit]),
             ft.Row([packageShipmentString, packageShipmentField]),
