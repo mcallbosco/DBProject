@@ -45,6 +45,10 @@ marker_layer_ref = ft.Ref[map.MarkerLayer]()
 mycursor.execute("USE shipping")
 mycursor.execute("SELECT * FROM status_info;")
 status_info = mycursor.fetchall()
+#set interactive_timeout and wait_timeout to a year
+mycursor.execute("SET GLOBAL interactive_timeout = 31536000")
+mycursor.execute("SET GLOBAL wait_timeout = 31536000")
+
 
 connected = False
 
