@@ -9,7 +9,7 @@ This instance features 4 interfaces for the user to interact with the system:
 
 In order to use this system, you will need to use on of the accounts listed at the bottom of the page. None of these accounts require a password, since this is a demo.
 
-If you would like a guided demo with photos, skip to [`Guided Demo`](#-Guided-Demo)
+If you would like a guided demo with photos, skip to [`Guided Demo`](#Guided-Demo)
 
 
 
