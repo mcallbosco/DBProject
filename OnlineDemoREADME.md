@@ -9,6 +9,10 @@ This instance features 4 interfaces for the user to interact with the system:
 
 In order to use this system, you will need to use on of the accounts listed at the bottom of the page. None of these accounts require a password, since this is a demo.
 
+If you would like a guided demo with photos, skip to [`Guided Demo`](Guided-Demo)
+
+
+
 ## Getting Started
 ## Entering a package
 First, you will need to log into a clerk account to enter a package into the system. "clerk1" is a clerk assigned to the "Chicago Distribution Center" that you may use. The address you use does not have to be valid, but you must enter all of the fields on the main page. The additional options button lets you enter insurance info. Press Estimate to get a shipping estimate, and press Submit to enter the package into the system. You can copy the tracking number into a text editor to save for later. The delivery distance is always entered in as 500 miles, so the estimates will always be the same. Ideally, this would get the distance between the two addresses, but this is not implimented due to it complicating the demo and requiring a valid address. If it was implimented, the price and delivery time would be calculated based on the distance using values in the database.
@@ -46,3 +50,10 @@ Here's a list of accounts based on the facility they are assigned to:
     - Clerk: clerk5
     - Manager: manager5
     - Driver: driver13, driver14, driver15
+
+## Guided Demo
+
+
+
+
+
