@@ -65,7 +65,6 @@ def main(page: ft.Page):
 
 
 def redo(page: ft.Page):
-    print("Visit")
     page.navigation_bar = None
     
     page.clean()
@@ -112,7 +111,7 @@ def redo(page: ft.Page):
     trackingNumberValue = ft.Text("")
     packageDemensionString = ft.Text("Package demensions: ")
     packageDemensionValue = ft.Text("")
-    packageDemensionValueCubic = ft.Text("", color=ft.colors.GREY_900)
+    packageDemensionValueCubic = ft.Text("", color=ft.Colors.GREY_900)
     packageWeightString = ft.Text("Package weight: ")
     packageWeightValue = ft.Text("")
     packageCreationDate = ft.Text("Label creation at: ")
@@ -361,7 +360,7 @@ def redo(page: ft.Page):
     def checkCallback(e):
         if doInitialFormatCheck:
             if not checkTracking(txti_tracking.value):
-                txti_tracking.border_color = ft.colors.RED
+                txti_tracking.border_color = ft.Colors.RED
                 errorMessage.visible = True
                 page.update()
                 return
@@ -382,8 +381,8 @@ def redo(page: ft.Page):
 
     
     def clearColor(e):
-        if txti_tracking.border_color == ft.colors.RED:
-            txti_tracking.border_color = ft.colors.GREY_500
+        if txti_tracking.border_color == ft.Colors.RED:
+            txti_tracking.border_color = ft.Colors.GREY_500
             errorMessage.visible = False
             page.update()
 
@@ -391,7 +390,7 @@ def redo(page: ft.Page):
     txti_tracking.width = page.width * 0.8
     but_check = ft.FilledTonalButton("Track")
     but_check.on_click = checkCallback
-    errorMessage = ft.Text("Invalid tracking number", color=ft.colors.RED, visible=False)
+    errorMessage = ft.Text("Invalid tracking number", color=ft.Colors.RED, visible=False)
     if showExampleStuff:
         text = ft.Text("Tracking number: 123456789045")
         page.add(text)
@@ -462,13 +461,13 @@ def spawnLogin(page: ft.Page):
                     spawnClerk(page, user)
                 case _:
                     txt_invalid.value = "Invalid Username or Password"
-                    txtf_password.border_color = ft.colors.RED
-                    txtf_username.border_color = ft.colors.RED
+                    txtf_password.border_color = ft.Colors.RED
+                    txtf_username.border_color = ft.Colors.RED
                     page.update()
         else:
             txt_invalid.value = "Invalid Username or Password"
-            txtf_password.border_color = ft.colors.RED
-            txtf_username.border_color = ft.colors.RED
+            txtf_password.border_color = ft.Colors.RED
+            txtf_username.border_color = ft.Colors.RED
             page.update()
     txtf_username = ft.TextField(text_align=ft.TextAlign.LEFT, width=300, on_submit=login_click)
     txtf_username.label = "Username"
@@ -477,7 +476,7 @@ def spawnLogin(page: ft.Page):
     txtf_password.password = True
     but_login = ft.FilledTonalButton("Login")
     image = ft.Image(src = f"/res/logoTemp.png")
-    txt_invalid = ft.Text("   ", color=ft.colors.RED)
+    txt_invalid = ft.Text("   ", color=ft.Colors.RED)
     loginPage = ft.Column(
             [
                 image,
@@ -497,8 +496,8 @@ def spawnLogin(page: ft.Page):
     def textChange(e):
         if txt_invalid.value != "   ":
             txt_invalid.value = "   "
-            txtf_password.border_color = ft.colors.BLACK   
-            txtf_username.border_color = ft.colors.BLACK
+            txtf_password.border_color = ft.Colors.BLACK   
+            txtf_username.border_color = ft.Colors.BLACK
             page.update()
     
     but_login.on_click = login_click
