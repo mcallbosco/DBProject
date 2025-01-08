@@ -52,8 +52,7 @@ Here's a list of accounts based on the facility they are assigned to:
     - Driver: driver13, driver14, driver15
 
 ## Guided Demo
-
-
+Let's get started by logging into "clerk1". A password is not required. 
 
 
 
