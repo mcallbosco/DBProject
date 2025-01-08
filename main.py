@@ -1,32 +1,443 @@
 import flet as ft
+from flet import TemplateRoute
 import mysql.connector
+import random
+import os
+import json
+
+import math
+import flet.map as map
+import datetime
 import time
+showExampleStuff = False
+doInitialFormatCheck = True
 
 #It's definitly used for localizing and not for when we switch from this name
 cName = "United Not States Postal Service"
 cCode = "UNSPS"
 
-mydb = mysql.connector.connect(
-        host="localhost",
-        port="3307",
-        user= "root",
-        password="RaNSEneyHYrO",
-    )
-mycursor = mydb.cursor(buffered=True, dictionary=True)
+weightUnit = "lb"
+smallWeightUnit = "oz"
+dimensionUnit = "in"
+cubicDemensionUnit = "ft^3"
+smallWeightConversion = 0.035274
+cubicConversion = 0.0000353147
+dimensionConversion = 0.393701
+
+#load MYSQLCREDS.JSON file
+
+if os.path.exists("MYSQLCREDS.JSON"):
+    with open("MYSQLCREDS.JSON") as f:
+        data = json.load(f)
+        mydb = mysql.connector.connect(
+            host=data["host"],
+            port=data["port"],
+            user= data["user"],
+            password=data["password"],
+        )
+else:
+    print("MYSQLCREDS.JSON file not found")
+    print("Look at MYSQLCREDS.JSON for an example")
+    exit()
+    
+mycursor = mydb.cursor(buffered=True,dictionary=True)
+marker_layer_ref = ft.Ref[map.MarkerLayer]()
 mycursor.execute("USE shipping")
+mycursor.execute("SELECT * FROM status_info;")
+status_info = mycursor.fetchall()
+#set interactive_timeout and wait_timeout to a year
+mycursor.execute("SET GLOBAL interactive_timeout = 31536000")
+mycursor.execute("SET GLOBAL wait_timeout = 31536000")
+
+
+connected = False
+
+#tracking number specification
+#first 10 digits are the package number
+#Last 2 digits are the previous numbers added together
+#The last 2 numbers are not stored in the database, they are only used to verify the number before checking serverside. 
+#init sql connection
 
 def main(page: ft.Page):
-    page.title = cCode + "Login"
-    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.vertical_alignment = ft.MainAxisAlignment.CENTER
-    spawnLogin(page)
+    global connected
+    page.on_connect = lambda e: redo(page)
+    redo(page)
 
+
+def redo(page: ft.Page):
+    page.navigation_bar = None
+    
+    page.clean()
+    #close any open dialogs
+    while page.overlay:
+        page.overlay.clear()
+    screenWidth = page.width
+    global map_container
+    
+    page.title = "Tracking Updates"
+
+    txt_number = ft.TextField(text_align=ft.TextAlign.RIGHT, width=100)
+
+    def checkTracking(number):
+        id = str(number)
+        if len(number) == 12:
+            if number[10:12] == str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]:
+                return True
+        return False
+    
+    def displayIDProperly(id):
+        return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
+    
+    
+    
+    map_container = ft.Container(
+        
+        height=400,
+        width=600,
+    )
+    
+    #fun strings
+    packageHasBeenDelivered = ft.Text("Your package has been delivered on ")
+    packageDeliveryDate = ft.Text("")
+    packageDeliveryType = ft.Text("")
+    packageInProgress = ft.Text("Your package ")
+    packageInProgressStatus = ft.Text("")
+    packageInProgressTime = ft.Text("It on track to arrive ", visible=False)
+    packageInProgressLate = ft.Text("is currently running late. The ETA is unknown. It is", visible=False)
+    packageInProgressTimeValue = ft.Text("")
+    
+    
+    trackingNumberString = ft.Text("Tracking number: ")
+    trackingNumberValue = ft.Text("")
+    packageDemensionString = ft.Text("Package demensions: ")
+    packageDemensionValue = ft.Text("")
+    packageDemensionValueCubic = ft.Text("", color=ft.Colors.GREY_900)
+    packageWeightString = ft.Text("Package weight: ")
+    packageWeightValue = ft.Text("")
+    packageCreationDate = ft.Text("Label creation at: ")
+    packageCreationDateValue = ft.Text("")
+    packageDispatchDate = ft.Text("Dispatch date: ")
+    packageDispatchDateValue = ft.Text("")
+    insuredString = ft.Text("Insured: ")
+    insuredValue = ft.Text("")
+    packageDispatchRow = ft.Row([packageDispatchDate, packageDispatchDateValue], visible=False)
+
+    searchResultsView2 = ft.Column(
+        [
+            ft.Row([trackingNumberString, trackingNumberValue]),\
+            ft.Row([packageDemensionString, packageDemensionValue, packageDemensionValueCubic]),\
+            ft.Row([packageWeightString, packageWeightValue]),\
+            ft.Row([packageCreationDate, packageCreationDateValue]),\
+            packageDispatchRow,\
+            ft.Row([insuredString, insuredValue])
+
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        visible=True
+    )
+    deliverdView = ft.Container(
+        expand=True,
+        content=ft.Row(
+        controls=[
+            ft.Column([packageHasBeenDelivered, packageDeliveryDate
+            ,packageDeliveryType]),
+            map_container
+
+        ],
+        alignment=ft.MainAxisAlignment.CENTER, wrap=True
+        
+    ), alignment=ft.alignment.center,visible=False)
+    searchResultsView = ft.Container(content=ft.ExpansionTile(
+                    title=ft.Text("Package Info"),
+                    affinity=ft.TileAffinity.LEADING,
+                    initially_expanded=False,
+                    controls=[
+                        searchResultsView2
+                    ],
+                    
+                    width=screenWidth * 0.7
+                ), expand=True, alignment=ft.alignment.center, visible=False)
+    historyPanel = ft.ExpansionPanelList(
+        controls=[])
+    HistoryView = ft.Container(content=ft.ExpansionTile(
+                    title=ft.Text("Delivery History" ),
+                    affinity=ft.TileAffinity.LEADING,
+                    initially_expanded=False,
+                    controls=[
+                        historyPanel
+                    ],
+                    
+                    expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
+    
+    progressBar = ft.ProgressBar(
+        value=0.5,
+        width=screenWidth * 0.8,
+        height=20,
+    )
+    progressBarView = ft.Container(
+        content=ft.Column([progressBar]),
+        visible=False,
+        alignment=ft.alignment.center
+    )
+
+    beingDeliveredText = ft.Container(
+        content=ft.Column([
+            ft.Row(
+                [packageInProgress, packageInProgressLate, packageInProgressStatus],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=0
+            ),
+            ft.Row(
+                [packageInProgressTime, packageInProgressTimeValue],
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=0
+            )
+        ], 
+        spacing=0,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        ),
+        visible=False,
+        alignment=ft.alignment.center,
+        expand=True
+    )
+    def calculatePersentageBar(routeProgress, daysElapsed, estimatedDays):
+        if daysElapsed > estimatedDays:
+            return 75*.01
+        latestValue = 0
+        for x in range(len(routeProgress)-1, -1, -1):
+            tempstatus = status_info[routeProgress[x]["status"]]["progress_bar_percentage"] 
+            if tempstatus:
+                latestValue = tempstatus
+                break
+            if tempstatus == 0:
+                latestValue = 0
+                break
+        if latestValue == 25:
+            return (25+ (daysElapsed/estimatedDays) * 50) *.01
+        else:
+            return latestValue * .01
+
+            
+
+    def route_change(route):
+        global map_container
+        #checks
+        routeStripped = route.data[1:]
+        if not checkTracking(routeStripped) and doInitialFormatCheck or route.data == "/":
+            return
+        routeStripped = routeStripped[0:10]
+        packageIDInternal = str(int(routeStripped))
+
+        mycursor.execute("SELECT * FROM package WHERE id = " + str(int(routeStripped)) + ";")
+        myresult = mycursor.fetchall()
+        if len(myresult) == 0:
+            page.go("/")
+        else:
+            progressBarView.visible = True
+            delivered = myresult[0]["time_of_delivery"]
+            #history logic
+            mycursor.execute("SELECT * FROM status_info;")
+            statusResults = mycursor.fetchall()
+            
+            mycursor.execute("SELECT * FROM package_status WHERE package_id = " + str(int(routeStripped)) + ";")
+            historyResults = mycursor.fetchall()
+            historyPanel.controls.clear()
+            for x in historyResults:
+                prettyTime = x["time_created"].strftime("%m/%d/%Y, %H:%M:%S")
+                if not x["location_name"]:
+                    location = "Location: Unknown"
+                else:
+                    location = "Location: \n" + x["location_name"]
+                
+                historyPanel.controls.append(ft.ExpansionPanel(
+                    header=ft.Row([
+                        ft.Text(statusResults[x["status"]-1]["name"] + " at \n" + prettyTime),
+                        ft.Text("        " +location, expand=True)
+                    ]),
+                    content=ft.Column([ft.Text("Details: " + statusResults[x["status"]-1]["description"])]),
+                ))
+            HistoryView.visible = True
+
+            searchResultsView.visible = True
+            trackingNumberValue.value = displayIDProperly(routeStripped)
+            packageDemensionValue.value = str(int(math.ceil(myresult[0]["length"])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0]["width"])* dimensionConversion)) + "x" + str(int(math.ceil(myresult[0]["height"])* dimensionConversion)) + dimensionUnit
+            weightInOz = round(myresult[0]["weight"] * smallWeightConversion)
+            if weightInOz < 16:
+                packageWeightValue.value = str(weightInOz) + smallWeightUnit
+            else:
+                packageWeightValue.value = str(int(weightInOz/16)) + weightUnit + " " + str(math.ceil(weightInOz % 16)) + smallWeightUnit
+            mycursor.execute(f"SELECT * FROM insurance WHERE id = {packageIDInternal};")
+            insuranceInfo = mycursor.fetchall()
+            if insuranceInfo:
+                insuranceValue = insuranceInfo[0]["value_coverage"]
+                insuredValue.value = "Yes, up to $" + str(insuranceValue)
+            else:
+                insuredValue.value = "No"
+            prettyCreation = myresult[0]["time_created"].strftime("%m/%d/%Y, %H:%M:%S")
+            if myresult[0]["time_of_dispatch"]:
+                prettyDispatch = myresult[0]["time_of_dispatch"].strftime("%m/%d/%Y, %H:%M:%S")
+            else:
+                prettyDispatch = ""
+                #for the days elapsed use  creation time - system time
+            daydiff = (myresult[0]["time_created"] - datetime.datetime.now()).days
+            if daydiff < 0:
+                daydiff = 0
+            shippingTime = myresult[0]["estimated_time_from_dispatch"]
+            shippingTime =  shippingTime - daydiff
+            if shippingTime < 0:
+                shippingTime = 0
+            daydiff = shippingTime
+
+            
+            progressBar.value = calculatePersentageBar(historyResults, daydiff, myresult[0]["estimated_time_from_dispatch"])
+            if delivered:
+                progressBar.value = 1
+                beingDeliveredText.visible = False
+                prettyDelivery = delivered.strftime("%m/%d/%Y, %H:%M:%S")
+                packageDeliveryDate.value = prettyDelivery
+                packageDeliveryX = float(myresult[0]["delivery_cordinates_x"])
+                packageDeliveryY = float(myresult[0]["delivery_cordinates_y"])
+                maps = map.Map(
+                    expand=True,
+                    initial_center=map.MapLatitudeLongitude(packageDeliveryX, packageDeliveryY),
+                    initial_zoom=18,
+                    interaction_configuration=map.MapInteractionConfiguration(
+                        flags=map.MapInteractiveFlag.ALL
+                    ),
+                    layers=[
+                        map.TileLayer(
+                            url_template="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                        ),
+                        map.MarkerLayer(ref=marker_layer_ref, markers=[]),
+                    ],
+                )
+                map_container.content = maps
+                packageDeliveryType.value = myresult[0]["delivery_conformation"]
+                marker_layer_ref.current.markers.clear()
+                marker_layer_ref.current.markers.append(
+                map.Marker(
+                    content=ft.Icon(
+                        ft.Icons.LOCATION_ON, color=ft.cupertino_colors.DESTRUCTIVE_RED
+                    ),
+                    coordinates=map.MapLatitudeLongitude(packageDeliveryX, packageDeliveryY),
+                    )
+                 )
+                             
+                
+                deliverdView.visible = True
+            else:
+                packageInProgressTime.visible = False
+                packageInProgressLate.visible = False
+                packageInProgressTimeValue.visible = False
+                deliverdView.visible = False
+                beingDeliveredText.visible = True
+                if len(historyResults) == 0:
+                    packageInProgressStatus.value = "has been created"
+                else:
+                    packageInProgressStatus.value = statusResults[historyResults[len(historyResults)-1]["status"]-1]["tense_name"]
+                if daydiff < 0:
+                    packageInProgressLate.visible = True
+                    packageInProgressTime.visible = False
+                    packageInProgressTimeValue.visible = False
+                else:
+                    packageInProgressTime.visible = True
+                    packageInProgressTimeValue.visible = True
+                    if daydiff == 0:
+                        packageInProgressTimeValue.value = "today"
+                    else:
+                        packageInProgressTimeValue.value = "in "+ str(daydiff) + " days"
+
+
+            packageCreationDateValue.value = prettyCreation
+            if prettyDispatch != "":
+                packageDispatchRow.visible = True
+                packageDispatchDateValue.value = prettyDispatch
+            else:
+                packageDispatchRow.visible = False
+            page.update()
+        
+
+    def checkCallback(e):
+        if doInitialFormatCheck:
+            if not checkTracking(txti_tracking.value):
+                txti_tracking.border_color = ft.Colors.RED
+                errorMessage.visible = True
+                page.update()
+                return
+        #start sql query
+        mycursor.execute("USE shipping")
+        mycursor.execute("SELECT * FROM package WHERE id = " + str(int(txti_tracking.value))[0:10] + ";")
+        myresult = mycursor.fetchall()
+        if len(myresult) == 0:
+            errorMessage.visible = True
+            page.update()
+            return
+            
+        page.go("/" + txti_tracking.value)
+        page.update()
+        #set page title
+        page.title = "Tracking Number: " + txti_tracking.value
+        page.update()
+
+    
+    def clearColor(e):
+        if txti_tracking.border_color == ft.Colors.RED:
+            txti_tracking.border_color = ft.Colors.GREY_500
+            errorMessage.visible = False
+            page.update()
+
+    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback)
+    txti_tracking.width = page.width * 0.8
+    but_check = ft.FilledTonalButton("Track")
+    but_check.on_click = checkCallback
+    errorMessage = ft.Text("Invalid tracking number", color=ft.Colors.RED, visible=False)
+    if showExampleStuff:
+        text = ft.Text("Tracking number: 123456789045")
+        page.add(text)
+
+
+        
+    
+    searchBarView = ft.Container(
+        content= ft.Column([ft.Row(
+        [
+            txti_tracking,
+            but_check
+        ],alignment=ft.MainAxisAlignment.CENTER),
+        ft.Row([errorMessage, ft.Text("")])],), 
+        padding=ft.padding.only(top=80),
+        alignment= ft.alignment.center, expand=True)
+    
+    loginButton = ft.FilledTonalButton("Login")
+    loginButton.on_click = lambda e: spawnLogin(page)
+    howToUseButton = ft.FilledTonalButton("How to use", url="https://github.com/mcallbosco/DBProject/blob/main/OnlineDemoREADME.md")
+
+
+    #create a row with the login and how to use button, have the how to use align to the left and the login align to the right
+    topButtonRow = ft.Row ([howToUseButton, loginButton], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    
+    page.add(topButtonRow)
+    page.add(searchBarView)
+    page.add (progressBarView)
+    page.add(beingDeliveredText)
+    page.add(deliverdView)
+    page.add(searchResultsView)
+    page.add (HistoryView)
+    page.on_route_change = route_change
+    page.go(page.route)
+    page.scroll = True
+    txti_tracking.focus()
 
 def displayIDProperly(id):
         return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
 
     
 def spawnLogin(page: ft.Page):
+    page.clean()
+    page.scroll = False
+    page.title = "Login"
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
     def login_click(e):
         valid = True
         typeOfUser = "Driver" #We will grab this from the user database if we end up doing that
@@ -49,11 +460,14 @@ def spawnLogin(page: ft.Page):
                     page.remove(loginPage)
                     spawnClerk(page, user)
                 case _:
-                    print("Unimplimented user type")
+                    txt_invalid.value = "Invalid Username or Password"
+                    txtf_password.border_color = ft.Colors.RED
+                    txtf_username.border_color = ft.Colors.RED
+                    page.update()
         else:
             txt_invalid.value = "Invalid Username or Password"
-            txtf_password.border_color = ft.colors.RED
-            txtf_username.border_color = ft.colors.RED
+            txtf_password.border_color = ft.Colors.RED
+            txtf_username.border_color = ft.Colors.RED
             page.update()
     txtf_username = ft.TextField(text_align=ft.TextAlign.LEFT, width=300, on_submit=login_click)
     txtf_username.label = "Username"
@@ -62,7 +476,7 @@ def spawnLogin(page: ft.Page):
     txtf_password.password = True
     but_login = ft.FilledTonalButton("Login")
     image = ft.Image(src = f"/res/logoTemp.png")
-    txt_invalid = ft.Text("   ", color=ft.colors.RED)
+    txt_invalid = ft.Text("   ", color=ft.Colors.RED)
     loginPage = ft.Column(
             [
                 image,
@@ -82,8 +496,8 @@ def spawnLogin(page: ft.Page):
     def textChange(e):
         if txt_invalid.value != "   ":
             txt_invalid.value = "   "
-            txtf_password.border_color = ft.colors.BLACK   
-            txtf_username.border_color = ft.colors.BLACK
+            txtf_password.border_color = ft.Colors.BLACK   
+            txtf_username.border_color = ft.Colors.BLACK
             page.update()
     
     but_login.on_click = login_click
@@ -119,7 +533,6 @@ def spawnManager(page: ft.Page, user):
                     controls=[
                         assignmentPanel
                     ],
-                    
                     expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
     listOfDrivers = []
     mycursor.execute(f"SELECT * FROM accounts WHERE roll = 'Driver' and facility_id = {user['facility_id']}")
@@ -127,8 +540,6 @@ def spawnManager(page: ft.Page, user):
     listOfLocations = []
     mycursor.execute(f"SELECT * FROM facilities")
     listOfLocations = mycursor.fetchall()
-
-    
     listOfDriversDropDown = ft.Dropdown(on_change=lambda e: page.update())
     listOfDriversDropDown.label = "Driver"
     driverOptions = []
@@ -187,14 +598,14 @@ def spawnManager(page: ft.Page, user):
         mycursor.execute(f"UPDATE package SET time_of_dispatch = NOW() WHERE id = {e.control.data}")
         mydb.commit()
         for assignment in assignmentPanel.controls:
-            print (assignment.title.controls[0].value)
-            print (e.control.data)
             if assignment.title.controls[0].value == str(displayIDProperly(str(e.control.data))):
                 assignmentPanel.controls.remove(assignment)
         page.update()
 
     def spawnHistory(e):
+        packageCounter = 0
         for package in packages:
+            packageCounter += 1
             addressString = ""
             mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
             address = mycursor.fetchone()
@@ -205,14 +616,13 @@ def spawnManager(page: ft.Page, user):
                 ]),
                 controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
             ))
-
+        if packageCounter == 0:
+            assignmentPanel.controls.append(ft.Text("No packages to assign."))
         assignmentView.visible = True
         page.update()
 
     page.add(assignmentView)
     spawnHistory(None)
-
-
 
 def spawnDriver(page: ft.Page, user):
     page.scroll = True
@@ -352,7 +762,9 @@ def spawnDriver(page: ft.Page, user):
                             lastStatus = getLatestStatus(package['package_id'])
                             statusX = lastStatus['location_x']
                             statusY = lastStatus['location_y']
-                            mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package['package_id']}, 11, NOW(),{statusX} , {statusY}, '{lastStatus["location_name"]}', 0)")
+                            package_id = package['package_id']
+                            location_name = lastStatus["location_name"]
+                            mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package_id}, 11, NOW(), {statusX}, {statusY}, '{location_name}', 0)")
                             mydb.commit()
                         else:
                             #left facility.
@@ -363,11 +775,10 @@ def spawnDriver(page: ft.Page, user):
                             nextStatus = facility["departed_status_code"]
                             mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({package['package_id']}, {nextStatus}, NOW(),0 , 0, '{facility["name"]}', {lastID})")
                             mydb.commit()
-                        mycursor.execute(f"UPDATE package_assignment SET status = 2 WHERE package_id = {checkbox.data}")
+                        mycursor.execute(f"UPDATE package_assignment SET status = 2 WHERE package_id = {checkbox.data} and driver_id = {userID}")
                         mydb.commit()
                 swapViews(0)
             for package in packagesAvaliableToDeliver:
-                print(package)
                 destinationSTR = ""
                 if package['to_facility_id'] == 0:
                     destinationSTR = "Final Destination"
@@ -382,7 +793,13 @@ def spawnDriver(page: ft.Page, user):
         #Logic for delivery view
         else:
             def unload(e):
+                #get arrival for current facility
+                mycursor.execute(f"SELECT * FROM facilities WHERE id = {user['facility_id']}")
+                facility = mycursor.fetchone()
+                arrivedStatus = facility['arrived_status_code']
+                facilityName = facility['name']
                 mycursor.execute(f"UPDATE package_assignment SET status = 1 WHERE package_id = {e.control.data} and driver_id = {userID} and status = 2")
+                mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({e.control.data}, {arrivedStatus}, NOW(), 0, 0, \"{facilityName}\", {user['facility_id']})")
                 mydb.commit()
                 swapViews(1)
             
@@ -436,7 +853,6 @@ def spawnDriver(page: ft.Page, user):
     #load container will be a list of packages that need to be loaded, check boxes to select them, and a button to confirm
     swapViews()
 
-
 def spawnClerk(page: ft.Page, user):
     page.scroll = True
     userLocationID = user['facility_id']
@@ -483,7 +899,7 @@ def spawnClerk(page: ft.Page, user):
     );"""
     page.title = "Clerk"
     def generateInsuranceTypeString(insuranceType):
-        return insuranceType['name'] + " $" + "max: $" + str(insuranceType['max_coverage'])
+        return insuranceType['name'] + "\n" + "Max Coverage: $" + str(insuranceType['max_coverage'])
     def generateid():
         mycursor.execute("SELECT MAX(id) FROM package")
         return mycursor.fetchone()['MAX(id)'] + 1
@@ -574,7 +990,7 @@ def spawnClerk(page: ft.Page, user):
         page.update()
     def addPackageTransaction(event):
         
-        calculatedDistance = 500
+        calculatedDistance = 1500
         id = generateid()
         shipmentCost = 0
         shipmentTypeID = 0 
@@ -583,20 +999,21 @@ def spawnClerk(page: ft.Page, user):
         for shipmentType in shipmentTypes:
             if shipmentType['name'] == shipmentID:
                 shipmentTypeID = shipmentType['id']
-                shipmentETA = float(shipmentType['days_per500Miles']) * calculatedDistance
+                shipmentETA = float(shipmentType['days_per500Miles']) * (calculatedDistance/500)
                 shipmentCost = shipmentType['cost_per500Miles']
         width = float(packageWidthField.value) * float(lengthKey[str(dimensionDropDown.value)])
         length = float(packageLengthField.value) * float(lengthKey[str(dimensionDropDown.value)])
         height = float(packageHeightField.value) * float(lengthKey[str(dimensionDropDown.value)])
         weight = float(packageWeightField.value) * 28.3495
         insuranceID = packageInsuranceField.value
-        insuranceID = None
         insuranceIDFinal = 0
         insuranceRow = None
+        insuranceCost = 0
         for insuranceType in insuranceTypes:
-            if insuranceType['id'] == insuranceID:
-                insuranceRow = insuranceType
+            if generateInsuranceTypeString(insuranceType) == insuranceID:
                 insuranceIDFinal = insuranceType['id']
+                insuranceRow = insuranceType
+
 
         
         if insuranceIDFinal != 0:
@@ -617,7 +1034,7 @@ def spawnClerk(page: ft.Page, user):
         
         mycursor.execute(f"INSERT INTO destination_address (id, country, name_line, first_name, last_name, organisation_name, administrative_area, locality, postal_code, thoroughfare, premise) VALUES ({id}, '{country}', '{firstName} {lastName}', '{firstName}', '{lastName}', '{organisation}', '{adminArea}', '{locality}', '{postalCode}', '{thoroughfare}', '{premise}')")
         if insuranceIDFinal != 0:
-            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, insuranceCost, {declaredValue})")
+            mycursor.execute(f"INSERT INTO insurance (id, type, price, value_coverage) VALUES ({id}, {insuranceIDFinal}, {insuranceCost}, {declaredValue})")
         
         mycursor.execute(f"INSERT INTO package_status (package_id, status, time_created, location_x, location_y, location_name, location_id) VALUES ({id}, 1, NOW(), 0, 0, \"{facility["name"]}\", {user["facility_id"]})")
         mycursor.execute(f"INSERT INTO ready_for_assignment (package_id, time_created, location) VALUES ({id}, NOW(), {user["facility_id"]})")
@@ -650,16 +1067,13 @@ def spawnClerk(page: ft.Page, user):
                 actions=material_actions,
             ))
             return
-        calculatedDistance = 500 #this would be calculated based on address and route, but it is out of scope. 
+        calculatedDistance = 1500 #this would be calculated based on address and route, but it is out of scope. 
         #put a popup with estimated distance, estimated insurance cost, estimated shipment cost, total cost and estimated time. 
         #get the insurance cost
         insuranceCost = 0
         insuranceID = packageInsuranceField.value
         for insuranceType in insuranceTypes:
             if generateInsuranceTypeString(insuranceType) == insuranceID:
-                insuranceCost = float(insuranceType['cost_per500Miles']) * (calculatedDistance/500)
-        for insuranceType in insuranceTypes:
-            if insuranceType['id'] == insuranceID:
                 insuranceCost = float(insuranceType['cost_per500Miles']) * (calculatedDistance/500)
         #get the shipment cost
         shipmentCost = 0
@@ -674,7 +1088,7 @@ def spawnClerk(page: ft.Page, user):
         #get the estimated time
         estimatedTime = 0
         for shipmentType in shipmentTypes:
-            if shipmentType['id'] == shipmentID:
+            if shipmentType['name'] == shipmentID:
                 estimatedTime = float(shipmentType['days_per500Miles']) * (calculatedDistance/500)
 
         if estimatedTime == 0:
@@ -726,6 +1140,7 @@ def spawnClerk(page: ft.Page, user):
 
     inputContainer = ft.Column(
         [
+            ft.Row([ft.Text(" ")]),
             ft.Row([packageWidthString, packageWidthField, packageDimensionsSeperator, packageLengthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
             ft.Row([packageWeightString, packageWeightField, packageWeightUnit]),
             ft.Row([packageShipmentString, packageShipmentField]),
@@ -745,5 +1160,4 @@ def spawnClerk(page: ft.Page, user):
     page.add(inputContainer)
     initilizeFields(None)
 
-
-ft.app(main, view=ft.AppView.WEB_BROWSER)
+ft.app(main, view = ft.AppView.WEB_BROWSER)
