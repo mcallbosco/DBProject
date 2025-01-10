@@ -59,6 +59,7 @@ connected = False
 #init sql connection
 
 def main(page: ft.Page):
+    page.title = "UNSPS"
     global connected
     page.on_connect = lambda e: redo(page)
     redo(page)
@@ -97,6 +98,8 @@ def redo(page: ft.Page):
     )
     
     #fun strings
+
+    
     packageHasBeenDelivered = ft.Text("Your package has been delivered on ")
     packageDeliveryDate = ft.Text("")
     packageDeliveryType = ft.Text("")
@@ -390,6 +393,9 @@ def redo(page: ft.Page):
     txti_tracking.width = page.width * 0.8
     but_check = ft.FilledTonalButton("Track")
     but_check.on_click = checkCallback
+
+    if txti_tracking.width + 100 > page.width:
+        txti_tracking.width = page.width - 120
     errorMessage = ft.Text("Invalid tracking number", color=ft.Colors.RED, visible=False)
     if showExampleStuff:
         text = ft.Text("Tracking number: 123456789045")
@@ -411,10 +417,18 @@ def redo(page: ft.Page):
     loginButton = ft.FilledTonalButton("Login")
     loginButton.on_click = lambda e: spawnLogin(page)
     howToUseButton = ft.FilledTonalButton("How to use", url="https://github.com/mcallbosco/DBProject/blob/main/OnlineDemoREADME.md")
-
+    githubImageLight = ft.Image(src = "GitHub_Logo.png")
+    githubImageDark = ft.Image(src = "GitHub_Logo_White.png")
+    githubImage = githubImageLight
+    if page.platform_brightness == ft.Brightness.DARK:
+        githubImage = githubImageDark
+        
+    githubButton = ft.FilledTonalButton(content=githubImage, url="https://github.com/mcallbosco/DBProject")
+    githubButton.width = 100
 
     #create a row with the login and how to use button, have the how to use align to the left and the login align to the right
-    topButtonRow = ft.Row ([howToUseButton, loginButton], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    topButtonRow = ft.Row ([howToUseButton,githubButton, loginButton], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    
     
     page.add(topButtonRow)
     page.add(searchBarView)
@@ -837,7 +851,7 @@ def spawnDriver(page: ft.Page, user):
             page.update()
             
         page.update()
-    page.title = "CupertinoNavigationBar Example"
+    page.title = "UNSPS Driver"
     page.navigation_bar = ft.CupertinoNavigationBar(
         bgcolor=ft.Colors.AMBER_100,
         inactive_color=ft.Colors.GREY,
@@ -1160,4 +1174,4 @@ def spawnClerk(page: ft.Page, user):
     page.add(inputContainer)
     initilizeFields(None)
 
-ft.app(main, view = ft.AppView.WEB_BROWSER)
+ft.app(main, view = ft.AppView.WEB_BROWSER, assets_dir="assets")
