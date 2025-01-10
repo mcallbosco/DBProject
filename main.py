@@ -953,7 +953,7 @@ def spawnClerk(page: ft.Page, user):
     packageFirstNameField = ft.TextField(max_length=50)
     packageLastNameString = ft.Text("Last Name: ")
     packageLastNameField = ft.TextField(max_length=50)
-    packageOrganisationString = ft.Text("Organisation: ")
+    packageOrganisationString = ft.Text("Organization: ")
     packageOrganisationField = ft.TextField(max_length=255)
     packageAdminAreaString = ft.Text("Administrative Area: ")
     packageAdminAreaField = ft.TextField(max_length=50)
