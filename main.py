@@ -79,6 +79,10 @@ def redo(page: ft.Page):
 
     txt_number = ft.TextField(text_align=ft.TextAlign.RIGHT, width=100)
 
+    #insert tracking number in url check
+    if page.route != "/":
+        route_change(page.route)
+
     def checkTracking(number):
         id = str(number)
         if len(number) == 12:

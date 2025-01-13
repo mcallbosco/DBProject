@@ -1,4 +1,4 @@
-Look into disapearing package
+✅Look into disapearing package
 Correct unit conversion issue from ft in the clerk to the tracking display
 Correct order of volume units on tracking/main display
 ✅Change placeholder titles and icons
