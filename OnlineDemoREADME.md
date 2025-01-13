@@ -13,14 +13,13 @@ If you would like a guided demo with photos, skip to [`Guided Demo`](#Guided-Dem
 
 
 
-Sure! Here's a revised version that’s clearer and more concise:
 
 ---
 
 ## Getting Started
 
 ### Entering a Package
-To begin, log into a clerk account to enter a package into the system. For this demo, use the "clerk1" account, assigned to the "Chicago Distribution Center", or any of other clerks listed in ['Accounts'](#Accounts) While the address you enter does not need to be valid, you must complete all the fields on the main page. 
+To begin, log into a clerk account to enter a package into the system. For this demo, use the "clerk1" account, assigned to the "Chicago Distribution Center", or any of other clerks listed in [`Accounts`](#Accounts) While the address you enter does not need to be valid, you must complete all the fields on the main page. 
 
 - The **Additional Options** button allows you to enter insurance information.
 - Click **Estimate** to receive a shipping cost estimate.
@@ -89,8 +88,52 @@ Here's a list of accounts based on the facility they are assigned to:
     - Manager: manager5
     - Driver: driver13, driver14, driver15
 
+---
+
 ## Guided Demo
-Let's get started by logging into "clerk1". A password is not required. 
+
+Let's begin by logging into "clerk3". No password is required for this demo.
+
+| ![screenshot of program](OnlineDemoREADMEAssets/1.png)  | ![screenshot of program](OnlineDemoREADMEAssets/2.png) | 
+| ------------- | ------------- |
+
+This is where you can enter package information. If needed, you can add insurance by clicking on "Additional Options". Once all required fields are filled in, click "Estimate", then click "Process" to finalize the package entry.
+
+| ![screenshot of program](OnlineDemoREADMEAssets/3.png)  | ![screenshot of program](OnlineDemoREADMEAssets/4.png)  | ![screenshot of program](OnlineDemoREADMEAssets/5.png) |
+| ------------- | ------------- | ------------- |
+
+Next, return to the login screen.
+
+![screenshot of program](OnlineDemoREADMEAssets/6.png)
+
+Log in to the manager's account associated with the facility where the package was entered. For this demo, use the account "manager3".
+
+![screenshot of program](OnlineDemoREADMEAssets/7.png)
+
+Now, you can assign the package to a driver. For this demo, we'll assign it to "driver8" and the destination address. If needed, you can also assign it to another facility.
+
+| ![screenshot of program](OnlineDemoREADMEAssets/8.png)  | ![screenshot of program](OnlineDemoREADMEAssets/9.png)|
+| ------------- | ------------- |
+
+Next, return to the login screen and log into the "driver8" account to load and deliver the package.
+
+![screenshot of program](OnlineDemoREADMEAssets/10.png)
+
+Once logged in, the driver loads the package into their truck.
+
+![screenshot of program](OnlineDemoREADMEAssets/11.png)
+
+After loading, navigate to the "Delivery" screen and click on the package to mark it as "Delivered".
+
+| ![screenshot of program](OnlineDemoREADMEAssets/12.png)  | ![screenshot of program](OnlineDemoREADMEAssets/13.png) |
+| ------------- | ------------- |
+
+If you assigned the delivery to the destination address, the process is complete. If the package was assigned to another facility, log into the manager account of that facility, assign the package to another driver, and select the next destination. Repeat this process until the package reaches its final destination.
+
+![screenshot of program](OnlineDemoREADMEAssets/14.png)
+
+At any point, the end user can check the package’s status and history in the tracking view. After the delivery, additional features such as the map are available.
+
 
 
 
