@@ -170,7 +170,7 @@ def redo(page: ft.Page):
             txti_tracking.border_color = ft.Colors.GREY_500
             errorMessage.visible = False
             page.update()
-    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback)
+    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback, adaptive=True)
 
 
     searchResultsView2 = ft.Column(
@@ -432,12 +432,9 @@ def redo(page: ft.Page):
 
     
 
-    txti_tracking.width = page.width * 0.8
     but_check = ft.FilledTonalButton("Track")
     but_check.on_click = checkCallback
 
-    if txti_tracking.width + 100 > page.width:
-        txti_tracking.width = page.width - 120
     errorMessage = ft.Text("Invalid tracking number", color=ft.Colors.RED, visible=False)
     if showExampleStuff:
         text = ft.Text("Tracking number: 123456789045")
