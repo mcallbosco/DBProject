@@ -159,7 +159,6 @@ def redo(page: ft.Page):
             return
             
         page.go("/" + txti_tracking.value)
-        page.update()
         #set page title
         page.title = "Tracking Number: " + txti_tracking.value
         page.update()
@@ -580,9 +579,7 @@ def spawnManager(page: ft.Page, user):
     row_back = ft.Container(content=ft.Row([but_backCorner], alignment=ft.MainAxisAlignment.START),bgcolor=ft.colors.SURFACE_VARIANT, padding=ft.padding.all(0))
     page.scroll = True
     screenWidth = page.width
-    #List of all packages in the facility. When a package is clicked on, there will be a popup with details, and the ability to assign a package to the driver with a destination facility.
-    mycursor.execute(f"SELECT * FROM ready_for_assignment where location = {user['facility_id']}")
-    packages = mycursor.fetchall()
+    
     assignmentPanel = ft.Column()
     assignmentView = ft.Container(content=ft.ExpansionTile(
                     title=ft.Text("Sitting Packages"),
@@ -593,16 +590,15 @@ def spawnManager(page: ft.Page, user):
                     ],
                     
                     expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
-    unassignmentPanel = ft.ExpansionPanelList(
-        controls=[])
+    unassignmentPanel = ft.Column()
     unassignmentView = ft.Container(content=ft.ExpansionTile(
-                    title=ft.Text("Sitting Packages"),
+                    title=ft.Text("Assigned Packages"),
                     affinity=ft.TileAffinity.LEADING,
                     initially_expanded=False,
                     controls=[
-                        assignmentPanel
+                        unassignmentPanel
                     ],
-                    expand=True, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
+                    expand=False, width=screenWidth * 0.7),expand=True, alignment=ft.alignment.center, visible=False)
     listOfDrivers = []
     mycursor.execute(f"SELECT * FROM accounts WHERE roll = 'Driver' and facility_id = {user['facility_id']}")
     listOfDrivers = mycursor.fetchall()
@@ -638,7 +634,31 @@ def spawnManager(page: ft.Page, user):
             addressString += address['postal_code']
         return addressString
     
-
+    def generateAssignmentPopup(e):
+        idToUse = 0
+        if type(e) == str:
+            idToUse = e
+        else:
+            idToUse = e.control.data
+            listOfDriversDropDown.value = driverOptions[0].data
+            listOfLocationsDropDown.value = locationOptions[0].data
+        
+        #get address
+        mycursor.execute(f"SELECT * FROM destination_address WHERE id = {idToUse}")
+        address = mycursor.fetchone()
+        addressString = constructAddressString(address)
+        txtAddress = ft.Text("Delivery Address:\n"+addressString)
+        popup = ft.AlertDialog(
+                title=ft.Text("Assign Package                    "),
+                content=ft.Container(ft.Column([txtAddress,listOfDriversDropDown,listOfLocationsDropDown],alignment=ft.MainAxisAlignment.CENTER, wrap=True)),
+                actions=[
+                    ft.TextButton(text="Assign", on_click=assignPackage, data=idToUse),
+                    ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)),
+                ],
+                
+                
+            )
+        page.open(popup)
     
     def assignPackage(e):
         selectedFacility = None
@@ -649,18 +669,20 @@ def spawnManager(page: ft.Page, user):
         for driver in listOfDrivers:
             if driver['username'] == listOfDriversDropDown.value:
                 selectedUserID = driver["id"]
-
+        closeButton = ft.TextButton(text="Close", on_click=lambda i: [page.close(e.control.parent), generateAssignmentPopup(str(e.control.data))])
         if selectedFacility == None or selectedUserID == "":
             #popup to select a facility
             material_actions = [
-                ft.TextButton(text="Close", on_click=lambda e: page.close(e.control.parent)),
+                closeButton,
                 ]
             page.open(ft.AlertDialog(
                 title=ft.Text("Error"),
-                content=ft.Text("Please select a destination facility/driver."),
+                content=ft.Text("Please select both a destination facility/driver."),
                 actions=material_actions,
             ))
+            closeButton.focus()
             return
+        
         mycursor.execute(f"DELETE FROM ready_for_assignment WHERE package_id = {e.control.data}")
         mycursor.execute(f"INSERT INTO package_assignment (package_id, driver_id, from_facility_id, to_facility_id, status) VALUES ({e.control.data}, {selectedUserID}, {user['facility_id']}, {selectedFacility}, 1)")
         mydb.commit()
@@ -669,28 +691,101 @@ def spawnManager(page: ft.Page, user):
         for assignment in assignmentPanel.controls:
             if assignment.title.controls[0].value == str(displayIDProperly(str(e.control.data))):
                 assignmentPanel.controls.remove(assignment)
+        spawnHistory(None, ThingToDo=1)
+        page.close(e.control.parent)
         page.update()
 
-    def spawnHistory(e):
-        packageCounter = 0
-        for package in packages:
-            packageCounter += 1
-            addressString = ""
-            mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
-            address = mycursor.fetchone()
-            addressString = constructAddressString(address)
-            assignmentPanel.controls.append(ft.ExpansionTile(
-                title=ft.Row([
-                    ft.Text(str(displayIDProperly(str(package['package_id']))),selectable=True),
-                ]),
-                controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString, selectable=True), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
+    def unassignPackage(e):
+        closeButton = ft.TextButton(text="Close", on_click=lambda i: [page.close(e.control.parent), generateAssignmentPopup(str(e.control.data))])
+        try:
+            mycursor.execute(f"DELETE FROM package_assignment WHERE package_id = {e.control.data} and status = 1")
+            mycursor.execute(f"INSERT INTO ready_for_assignment (package_id, time_created, location) VALUES ({e.control.data}, NOW(), {user['facility_id']})")
+            mydb.commit()
+        except:
+            material_actions = [
+                closeButton,
+                ]
+            page.open(ft.AlertDialog(
+                title=ft.Text("Error"),
+                content=ft.Text("There was an error unassigning the package."),
+                actions=material_actions,
             ))
-        if packageCounter == 0:
-            assignmentPanel.controls.append(ft.Text("No packages to assign."))
-        assignmentView.visible = True
+            closeButton.focus()
+            return
+        for assignment in unassignmentPanel.controls:
+            if assignment.title.controls[0].value == str(displayIDProperly(str(e.control.data))):
+                unassignmentPanel.controls.remove(assignment)
+
+        spawnHistory(None, ThingToDo=0)
         page.update()
+        
+
+    def spawnHistory(e, ThingToDo = None):
+        packageCounter = 0
+        packagesAssignedCounter = 0
+        if ThingToDo == None or ThingToDo == 0:
+            mycursor.execute(f"SELECT * FROM ready_for_assignment where location = {user['facility_id']}")
+            packages = mycursor.fetchall()
+            assignmentPanel.controls.clear()
+            for package in packages:
+                packageCounter += 1
+                addressString = ""
+                mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
+                address = mycursor.fetchone()
+                addressString = constructAddressString(address)
+                assignmentPanel.controls.append(ft.ExpansionTile(
+                    title=ft.Row([
+                        ft.Text(str(displayIDProperly(str(package['package_id']))),selectable=True),
+                    ]),
+                    controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString, selectable=True)]), ft.FilledTonalButton("Assign", on_click=generateAssignmentPopup, data=package['package_id'])]),
+                )
+            if packageCounter == 0:
+                assignmentPanel.controls.append(ft.Text("No packages to assign."))
+        if ThingToDo == None or ThingToDo == 1:
+            unassignmentPanel.controls.clear()
+            mycursor.execute(f"SELECT * FROM package_assignment WHERE from_facility_id = {user['facility_id']} and status = 1")
+            packagesAssigned = mycursor.fetchall()
+            mycursor.execute(f"SELECT * FROM accounts WHERE roll = 'Driver' and facility_id = {user['facility_id']}")
+            listOfDrivers = mycursor.fetchall()
+            #convert to dict
+            dictOfDrivers = {}
+            for driver in listOfDrivers:
+                dictOfDrivers[driver['id']] = driver['username']
+
+            for package in packagesAssigned:
+                packagesAssignedCounter += 1
+                addressString = ""
+                mycursor.execute(f"SELECT * FROM destination_address WHERE id = {package['package_id']}")
+                address = mycursor.fetchone()
+                addressString = constructAddressString(address)
+                beingDeliveredToString = ""
+                if package["to_facility_id"] == 0:
+                    beingDeliveredToString = "Being delivered to address"
+                else:
+                    mycursor.execute(f"SELECT * FROM facilities WHERE id = {package['to_facility_id']}")
+                    facility = mycursor.fetchone()
+                    beingDeliveredToString = "Being delivered to " + facility['name']
+                unassignmentPanel.controls.append(ft.ExpansionTile(
+                    title=ft.Row([
+                        ft.Text(str(displayIDProperly(str(package['package_id']))),selectable=True),
+                    ]),
+                    subtitle=ft.Text("Assigned to: " + dictOfDrivers[package['driver_id']]),
+                    
+                    controls=[ft.Column([ft.Text(beingDeliveredToString),ft.Text("Final Address: "), ft.Text(addressString, selectable=True)]), ft.FilledTonalButton("Unassign", on_click=unassignPackage, data=package['package_id'])]),
+                )
+            if packagesAssignedCounter == 0:
+                unassignmentPanel.controls.append(ft.Text("No packages assigned."))
+        
+        assignmentView.visible = True
+        unassignmentView.visible = True
+        page.update()
+
+    
     page.add(row_back)
+    paddingContainer = ft.Container(padding=ft.padding.only(top=10, bottom=int(page.height/2), left=10, right=10))
     page.add(assignmentView)
+    page.add(unassignmentView)
+    page.add(paddingContainer)
     spawnHistory(None)
 
 def spawnDriver(page: ft.Page, user):
@@ -703,6 +798,8 @@ def spawnDriver(page: ft.Page, user):
             #only use name, locality, administrative_area, postal_code
             if address['name_line'] != None:
                 addressString += address['name_line'] + "\n"
+            if address['thoroughfare'] != None:
+                addressString += address['thoroughfare'] + "\n"
             if address['locality'] != None:
                 addressString += address['locality'] + ", "
             if address['administrative_area'] != None:
@@ -757,7 +854,7 @@ def spawnDriver(page: ft.Page, user):
                     ]
                 page.open(ft.AlertDialog(
                         title=ft.Text("Confirm Delivery"),
-                        content=ft.Text("Tracking number: " + displayIDProperly(str(manualData)) + "\n Package Address:\n" + constructAddressString(address) + "\n Destination Address:\n " + destinationFacilityName, selectable=True),
+                        content=ft.Text("Tracking number: " + displayIDProperly(str(manualData)) + "\n\nPackage Address:\n" + constructAddressString(address) + "\n\nDestination:\n" + destinationFacilityName, selectable=True),
                         actions=material_actions,
                     ))
                 yesbuttonforthing.focus()
@@ -860,7 +957,7 @@ def spawnDriver(page: ft.Page, user):
                 checkboxes.append(ft.Checkbox(label=displayIDProperly(str(package['package_id'])) + "     Destination: " + destinationSTR, data=package['package_id']))
             loadContainerContents.append(ft.Column(checkboxes))
             loadContainerContents.append(ft.FilledTonalButton("Load", on_click=loadMarkedPackages))
-            page.add(ft.Column(loadContainerContents))
+            page.add(ft.Container(content=ft.Column(loadContainerContents), padding=ft.padding.all(10)))
             page.update()
         #Logic for delivery view
         else:
@@ -904,7 +1001,7 @@ def spawnDriver(page: ft.Page, user):
                 ))
             
            
-            page.add(deliveryPanel)
+            page.add(ft.Container(content=deliveryPanel, padding=ft.padding.only(left = 10, top=10, right=10, bottom=50)))
             #on click bring up a popup to confirm and then call the function
             page.add(ft.FilledTonalButton("Mark all as delivered", on_click=markAllAsDelivered))
             page.update()
@@ -1203,8 +1300,8 @@ def spawnClerk(page: ft.Page, user):
             ft.TextButton(text="Close", on_click=checkAdditionalOptions ),
             ]
         page.open(ft.AlertDialog(
-            title=ft.Text("Additional Options"),
-            content=ft.Column([ft.Text("Insurance Options"), packageInsuranceField, ft.Text("Declared Value"), packageDeclaredValueField]),
+            title=ft.Text("Additional Options                  "),
+            content=ft.Column([ft.Text("Insurance Options"), packageInsuranceField, ft.Text("Declared Value"), packageDeclaredValueField], wrap=True),
             actions=material_actions,
         ))
 
@@ -1212,14 +1309,13 @@ def spawnClerk(page: ft.Page, user):
 
 
 
-    packageProcessButton = ft.FilledTonalButton("Estimate", on_click=generateEstimate)
+    packageProcessButton = ft.Container(ft.FilledTonalButton("Estimate", on_click=generateEstimate), padding=ft.padding.only(bottom = 30))
     additionalInfoButton = ft.FilledTonalButton("Additional Options", on_click=spawnAdditionalOptions)
 
 
     inputContainer = ft.Container(content=ft.Column(
         [
             
-            ft.Row([ft.Text(" ")]),
             ft.Row([packageWidthString, packageLengthField, packageDimensionsSeperator,packageWidthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
             ft.Row([packageWeightString, packageWeightField, packageWeightUnit]),
             ft.Row([packageShipmentString, packageShipmentField]),
