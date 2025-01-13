@@ -13,19 +13,57 @@ If you would like a guided demo with photos, skip to [`Guided Demo`](#Guided-Dem
 
 
 
+Sure! Here's a revised version that’s clearer and more concise:
+
+---
+
 ## Getting Started
-## Entering a package
-First, you will need to log into a clerk account to enter a package into the system. "clerk1" is a clerk assigned to the "Chicago Distribution Center" that you may use. The address you use does not have to be valid, but you must enter all of the fields on the main page. The additional options button lets you enter insurance info. Press Estimate to get a shipping estimate, and press Submit to enter the package into the system. You can copy the tracking number into a text editor to save for later. The delivery distance is always entered in as 500 miles, so the estimates will always be the same. Ideally, this would get the distance between the two addresses, but this is not implimented due to it complicating the demo and requiring a valid address. If it was implimented, the price and delivery time would be calculated based on the distance using values in the database.
 
+### Entering a Package
+To begin, log into a clerk account to enter a package into the system. For this demo, use the "clerk1" account, assigned to the "Chicago Distribution Center", or any of other clerks listed in ['Accounts'](#Accounts) While the address you enter does not need to be valid, you must complete all the fields on the main page. 
 
-## Assigning a package
-Next, you will need to log into a manager account to assign the package to a driver. "manager1" is a manager assigned to the "Chicago Distribution Center" that you can use. The manager interface will show all of the unassined packages in the facility that you can then assign. Your previously entered package should be in the list. Click on the package to assign it to a driver and a destination, which can either be the final address or another facility. Remeber the driver's name, since this will be the next user you log into. If you selected a facility, you should also remember it since you will need to log into a manager account at that facility to assign the package to a driver there. 
+- The **Additional Options** button allows you to enter insurance information.
+- Click **Estimate** to receive a shipping cost estimate.
+- After generating the estimate, click **Submit** to add the package to the system.
 
-## Delivering a package
-Finally, you will need to log into a driver account to deliver the package. "driver1" is a driver assigned to the "Chicago Distribution Center" that you can use. The driver interface will show all of the packages assigned to you. Click on the package to mark it as delivered. You can then log out. If you delivered it to the final address, you are finished. If you delivered it to another facility, you will need to log into a manager account at that facility to assign the package to a driver there. 
+You should copy the generated tracking number into a text editor to save it for future reference. 
 
-## Tracking a package
-Tracking a package is simple. Just enter the tracking number and you can see the status of the package, a map of the delivery location when it's delivered, and the history of the package. The delivery chordinates are based on a placeholder always entered into the system, so the map will always show the same location. Ideally, this would get the geolocation of the driver when they mark a package as delivered, but this is not implimented due to it complicating the demo.
+Note: The delivery distance is fixed at 500 miles for this demo, so the estimates will remain the same. Ideally, the system would calculate the distance based on the actual addresses entered, but this feature is not implemented to simplify the demo and avoid requiring valid addresses. If implemented, the price and delivery time would be calculated based on the distance.
+
+---
+
+### Assigning a Package
+Next, log into a manager account to assign the package to a driver. I would recomend using the "manager1" account, which is also assigned to the "Chicago Distribution Center" in this demo. The manager interface will display all unassigned packages within the facility. Your recently entered package should appear in the list.
+
+- Click on the package to assign it to a driver and a destination. The destination can be either the final address or another facility.
+- Take note of the driver's name, as that's the next account in the chain.
+
+---
+
+### Delivering a Package
+Log into the driver account to complete the delivery. The driver interface will display all packages assigned to that driver, along with options to load them.
+
+- Click on the package to 'load' it
+- Navigate to the 'Delivery' view
+- Select a package and mark it as delivered.
+- If the package was delivered to the final address, the process is complete.
+- If delivered to another facility, log into a manager account at that facility to assign the package to another driver at that facility until you deliver to the destination address.
+
+---
+
+### Tracking a Package
+To track a package, simply enter its tracking number. You’ll be able to view the current status, a map showing the delivery location once the package is delivered, and the delivery history.
+
+Note: The map will always display the same placeholder location because the delivery coordinates are based on a fixed entry in the system. Ideally, the system would record the actual geolocation when the package is delivered, but this feature is not implemented to simplify the demo.
+
+---
+
+## Small Things You May Have Missed
+- The UI is reactive, and changes based on the size of the screen when it is loaded.
+- The Clerk, Manager, and Tracking UIs are all designed to be quick and optimized for only keybaord input.
+- The Driver UI is optimized for a phone screen, since that is what a driver would likley use when loading their truck and making deliverys.
+- If you add /'trackingnumber' to the URL, you will automatically be directed to the tracking view for your package.
+- It has auto dark and light modes.
 
 
 ## Accounts
