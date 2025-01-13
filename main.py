@@ -9,6 +9,13 @@ import math
 import flet.map as map
 import datetime
 import time
+import warnings
+import requests
+if os.path.exists("IPGEOLOCATIONKEY.JSON"):
+    with open("IPGEOLOCATIONKEY.JSON") as f:
+        data = json.load(f)
+        ipgeolocationkey = data["key"]
+warnings.filterwarnings("ignore", category=DeprecationWarning) 
 showExampleStuff = False
 doInitialFormatCheck = True
 
@@ -25,6 +32,11 @@ cubicConversion = 0.0000353147
 dimensionConversion = 0.393701
 
 #load MYSQLCREDS.JSON file
+
+def callIPGeolocation(ip):
+    url = f"https://api.ipgeolocation.io/ipgeo?apiKey={ipgeolocationkey}&ip={ip}"
+    response = requests.get(url)
+    return response.json()
 
 if os.path.exists("MYSQLCREDS.JSON"):
     with open("MYSQLCREDS.JSON") as f:
@@ -43,6 +55,8 @@ else:
 mycursor = mydb.cursor(buffered=True,dictionary=True)
 marker_layer_ref = ft.Ref[map.MarkerLayer]()
 mycursor.execute("USE shipping")
+mycursor.execute("SET time_zone = '+00:00'")
+
 mycursor.execute("SELECT * FROM status_info;")
 status_info = mycursor.fetchall()
 #set interactive_timeout and wait_timeout to a year
@@ -59,8 +73,10 @@ connected = False
 #init sql connection
 
 def main(page: ft.Page):
+    page.padding = ft.padding.all(0)
     page.title = "UNSPS"
     global connected
+    #clear route
     page.on_connect = lambda e: redo(page)
     redo(page)
 
@@ -79,9 +95,7 @@ def redo(page: ft.Page):
 
     txt_number = ft.TextField(text_align=ft.TextAlign.RIGHT, width=100)
 
-    #insert tracking number in url check
-    if page.route != "/":
-        route_change(page.route)
+
 
     def checkTracking(number):
         id = str(number)
@@ -128,6 +142,37 @@ def redo(page: ft.Page):
     insuredString = ft.Text("Insured: ")
     insuredValue = ft.Text("")
     packageDispatchRow = ft.Row([packageDispatchDate, packageDispatchDateValue], visible=False)
+    def checkCallback(e):
+        if doInitialFormatCheck:
+            if not checkTracking(txti_tracking.value):
+                txti_tracking.border_color = ft.Colors.RED
+                errorMessage.visible = True
+                page.update()
+                return
+        #start sql query
+        mycursor.execute("USE shipping")
+        mycursor.execute("SELECT * FROM package WHERE id = " + str(int(txti_tracking.value))[0:10] + ";")
+        myresult = mycursor.fetchall()
+        if len(myresult) == 0:
+            errorMessage.visible = True
+            page.update()
+            return
+            
+        page.go("/" + txti_tracking.value)
+        page.update()
+        #set page title
+        page.title = "Tracking Number: " + txti_tracking.value
+        page.update()
+
+    
+
+    def clearColor(e):
+        if txti_tracking.border_color == ft.Colors.RED:
+            txti_tracking.border_color = ft.Colors.GREY_500
+            errorMessage.visible = False
+            page.update()
+    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback)
+
 
     searchResultsView2 = ft.Column(
         [
@@ -187,6 +232,8 @@ def redo(page: ft.Page):
         alignment=ft.alignment.center
     )
 
+    
+
     beingDeliveredText = ft.Container(
         content=ft.Column([
             ft.Row(
@@ -227,14 +274,24 @@ def redo(page: ft.Page):
             
 
     def route_change(route):
+        ipOfUser = page.client_ip
         global map_container
+        #route as string
+        if (type(route) == str):
+            routeToUse = route
+        else:
+            routeToUse = route.data
         #checks
-        routeStripped = route.data[1:]
-        if not checkTracking(routeStripped) and doInitialFormatCheck or route.data == "/":
+        if routeToUse == "/login":
+            spawnLogin(page)
             return
+        routeStripped = routeToUse[1:]
+        if not checkTracking(routeStripped) and doInitialFormatCheck or routeToUse == "/":
+            return
+        txti_tracking.value = routeStripped
+
         routeStripped = routeStripped[0:10]
         packageIDInternal = str(int(routeStripped))
-
         mycursor.execute("SELECT * FROM package WHERE id = " + str(int(routeStripped)) + ";")
         myresult = mycursor.fetchall()
         if len(myresult) == 0:
@@ -280,12 +337,22 @@ def redo(page: ft.Page):
                 insuredValue.value = "Yes, up to $" + str(insuranceValue)
             else:
                 insuredValue.value = "No"
-            prettyCreation = myresult[0]["time_created"].strftime("%m/%d/%Y, %H:%M:%S")
+
+            offset = 0
+            try:
+                userInfo = callIPGeolocation(ipOfUser)
+                offset = userInfo["time_zone"]["offset"]
+            except:
+                pass
+            prettyCreation = myresult[0]["time_created"].strftime("%m/%d/%Y, %I:%M %p")
+            prettyDispatch = ""
             if myresult[0]["time_of_dispatch"]:
-                prettyDispatch = myresult[0]["time_of_dispatch"].strftime("%m/%d/%Y, %H:%M:%S")
-            else:
-                prettyDispatch = ""
-                #for the days elapsed use  creation time - system time
+                prettyDispatch = myresult[0]["time_of_dispatch"].strftime("%m/%d/%Y, %I:%M %p")
+            if offset != 0:
+                prettyCreation = (myresult[0]["time_created"] + datetime.timedelta(hours=offset)).strftime("%m/%d/%Y, %I:%M %p")
+                if prettyDispatch != "":
+                    prettyDispatch = (myresult[0]["time_of_dispatch"] + datetime.timedelta(hours=offset)).strftime("%m/%d/%Y, %I:%M %p")
+            
             daydiff = (myresult[0]["time_created"] - datetime.datetime.now()).days
             if daydiff < 0:
                 daydiff = 0
@@ -364,36 +431,8 @@ def redo(page: ft.Page):
             page.update()
         
 
-    def checkCallback(e):
-        if doInitialFormatCheck:
-            if not checkTracking(txti_tracking.value):
-                txti_tracking.border_color = ft.Colors.RED
-                errorMessage.visible = True
-                page.update()
-                return
-        #start sql query
-        mycursor.execute("USE shipping")
-        mycursor.execute("SELECT * FROM package WHERE id = " + str(int(txti_tracking.value))[0:10] + ";")
-        myresult = mycursor.fetchall()
-        if len(myresult) == 0:
-            errorMessage.visible = True
-            page.update()
-            return
-            
-        page.go("/" + txti_tracking.value)
-        page.update()
-        #set page title
-        page.title = "Tracking Number: " + txti_tracking.value
-        page.update()
-
     
-    def clearColor(e):
-        if txti_tracking.border_color == ft.Colors.RED:
-            txti_tracking.border_color = ft.Colors.GREY_500
-            errorMessage.visible = False
-            page.update()
 
-    txti_tracking = ft.TextField(value="", text_align=ft.TextAlign.RIGHT, input_filter = ft.InputFilter('^[0-9]*$'), max_length=12, on_change=clearColor, on_submit=checkCallback)
     txti_tracking.width = page.width * 0.8
     but_check = ft.FilledTonalButton("Track")
     but_check.on_click = checkCallback
@@ -419,7 +458,7 @@ def redo(page: ft.Page):
         alignment= ft.alignment.center, expand=True)
     
     loginButton = ft.FilledTonalButton("Login")
-    loginButton.on_click = lambda e: spawnLogin(page)
+    loginButton.on_click = lambda e: page.go("/login")
     howToUseButton = ft.FilledTonalButton("How to use", url="https://github.com/mcallbosco/DBProject/blob/main/OnlineDemoREADME.md")
     githubImageLight = ft.Image(src = "GitHub_Logo.png")
     githubImageDark = ft.Image(src = "GitHub_Logo_White.png")
@@ -431,9 +470,7 @@ def redo(page: ft.Page):
     githubButton.width = 100
 
     #create a row with the login and how to use button, have the how to use align to the left and the login align to the right
-    topButtonRow = ft.Row ([howToUseButton,githubButton, loginButton], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-    
-    
+    topButtonRow = ft.Container(content=ft.Row ([howToUseButton,githubButton, loginButton], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), padding=ft.padding.all(10))    
     page.add(topButtonRow)
     page.add(searchBarView)
     page.add (progressBarView)
@@ -442,15 +479,17 @@ def redo(page: ft.Page):
     page.add(searchResultsView)
     page.add (HistoryView)
     page.on_route_change = route_change
-    page.go(page.route)
+    route_change(page.route)
     page.scroll = True
     txti_tracking.focus()
+
 
 def displayIDProperly(id):
         return str(id) + str((int(id[0])+int(id[1])+int(id[2])+int(id[3])+int(id[4])+int(id[5])+int(id[6])+int(id[7])+int(id[8])+int(id[9]))).zfill(3)[1:3]
 
     
 def spawnLogin(page: ft.Page):
+    page.navigation_bar = None
     page.clean()
     page.scroll = False
     page.title = "Login"
@@ -470,12 +509,15 @@ def spawnLogin(page: ft.Page):
                 case "Manager":
                     #clear the page
                     page.remove(loginPage)
+                    page.remove(row_back)
                     spawnManager(page, user)
                 case "Driver":
                     page.remove(loginPage)
+                    page.remove(row_back)
                     spawnDriver(page, user)
                 case "Clerk":
                     page.remove(loginPage)
+                    page.remove(row_back)
                     spawnClerk(page, user)
                 case _:
                     txt_invalid.value = "Invalid Username or Password"
@@ -495,6 +537,10 @@ def spawnLogin(page: ft.Page):
     but_login = ft.FilledTonalButton("Login")
     image = ft.Image(src = f"/res/logoTemp.png")
     txt_invalid = ft.Text("   ", color=ft.Colors.RED)
+    but_back = ft.FilledTonalButton("Back")
+    but_back.on_click = lambda e: page.go("/")
+    but_backCorner = ft.CupertinoButton(icon=ft.Icons.ARROW_BACK, on_click=lambda e: page.go("/"))
+    row_back = ft.Container(content=ft.Row([but_backCorner], alignment=ft.MainAxisAlignment.START), bgcolor=ft.colors.SURFACE_VARIANT)
     loginPage = ft.Column(
             [
                 image,
@@ -502,12 +548,12 @@ def spawnLogin(page: ft.Page):
                 txtf_password,
                 txt_invalid,
                 ft.Row(
-                [but_login],
-                alignment=ft.MainAxisAlignment.END,
+                [but_back, but_login],alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 width=300 
             )
             ],
             alignment=ft.MainAxisAlignment.CENTER,
+            expand=True
 
         )
 
@@ -517,16 +563,21 @@ def spawnLogin(page: ft.Page):
             txtf_password.border_color = ft.Colors.BLACK   
             txtf_username.border_color = ft.Colors.BLACK
             page.update()
-    
+
     but_login.on_click = login_click
     txtf_username.on_change = textChange
     txtf_password.on_change = textChange
+    page.on_route_change = lambda e : redo(page)
     page.add(
-        loginPage
+        row_back,
+        loginPage,
+
     )
     txtf_username.focus()
 
 def spawnManager(page: ft.Page, user):
+    but_backCorner = ft.CupertinoButton(icon=ft.Icons.ARROW_BACK, on_click=lambda e: spawnLogin(page))
+    row_back = ft.Container(content=ft.Row([but_backCorner], alignment=ft.MainAxisAlignment.START),bgcolor=ft.colors.SURFACE_VARIANT, padding=ft.padding.all(0))
     page.scroll = True
     screenWidth = page.width
     #List of all packages in the facility. When a package is clicked on, there will be a popup with details, and the ability to assign a package to the driver with a destination facility.
@@ -630,19 +681,21 @@ def spawnManager(page: ft.Page, user):
             addressString = constructAddressString(address)
             assignmentPanel.controls.append(ft.ExpansionTile(
                 title=ft.Row([
-                    ft.Text(str(displayIDProperly(str(package['package_id'])))),
+                    ft.Text(str(displayIDProperly(str(package['package_id']))),selectable=True),
                 ]),
-                controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
+                controls=[ft.Column([ft.Text("Details: "), ft.Text(addressString, selectable=True), ft.Row([ft.Text("Driver: "), listOfDriversDropDown]), ft.Row([ft.Text("Destination: "), listOfLocationsDropDown]), ft.FilledTonalButton("Assign", on_click=assignPackage, data=package['package_id'])])],
             ))
         if packageCounter == 0:
             assignmentPanel.controls.append(ft.Text("No packages to assign."))
         assignmentView.visible = True
         page.update()
-
+    page.add(row_back)
     page.add(assignmentView)
     spawnHistory(None)
 
 def spawnDriver(page: ft.Page, user):
+    but_backCorner = ft.CupertinoButton(icon=ft.Icons.ARROW_BACK, on_click=lambda e: spawnLogin(page))
+    row_back = ft.Container(content=ft.Row([but_backCorner], alignment=ft.MainAxisAlignment.START),bgcolor=ft.colors.SURFACE_VARIANT, padding=ft.padding.all(0))
     page.scroll = True
     inTheMiddleOfSomething = False
     def constructAddressString(address):
@@ -704,7 +757,7 @@ def spawnDriver(page: ft.Page, user):
                     ]
                 page.open(ft.AlertDialog(
                         title=ft.Text("Confirm Delivery"),
-                        content=ft.Text("Tracking number: " + displayIDProperly(str(manualData)) + "\n Package Address:\n" + constructAddressString(address) + "\n Destination Address:\n " + destinationFacilityName),
+                        content=ft.Text("Tracking number: " + displayIDProperly(str(manualData)) + "\n Package Address:\n" + constructAddressString(address) + "\n Destination Address:\n " + destinationFacilityName, selectable=True),
                         actions=material_actions,
                     ))
                 yesbuttonforthing.focus()
@@ -749,9 +802,10 @@ def spawnDriver(page: ft.Page, user):
             index = e.control.selected_index
         #Logic for loading view
         if index == 0:
-
             mycursor.execute(f"SELECT * FROM package_assignment WHERE driver_id = {userID} and status = 1")
             page.clean()
+            page.add(row_back)
+
             packagesAvaliableToDeliver = mycursor.fetchall()
             if len(packagesAvaliableToDeliver) == 0:
                 page.add(ft.Text("You have no packages assigned to you."))
@@ -822,6 +876,7 @@ def spawnDriver(page: ft.Page, user):
                 swapViews(1)
             
             page.clean()
+            page.add(row_back)
             mycursor.execute(f"SELECT * FROM package_assignment WHERE driver_id = {userID} and status = 2")
             packagesToDeliver = mycursor.fetchall()
             if len(packagesToDeliver) == 0:
@@ -845,7 +900,7 @@ def spawnDriver(page: ft.Page, user):
                         ft.Text(str(displayIDProperly(str(package['package_id'])))),
                     ]),
                     can_tap_header=True,
-                    content=ft.Column([ft.Text("Deliver to: "), ft.Text(addressToWrite), ft.Button("Mark as delivered", data=package['package_id'], on_click=markAsDelivered), ft.Button("Unload", on_click = unload, data=package['package_id'])]),
+                    content=ft.Column([ft.Text("Deliver to: "), ft.Text(addressToWrite, selectable=True), ft.Button("Mark as delivered", data=package['package_id'], on_click=markAsDelivered), ft.Button("Unload", on_click = unload, data=package['package_id'])]),
                 ))
             
            
@@ -872,6 +927,11 @@ def spawnDriver(page: ft.Page, user):
     swapViews()
 
 def spawnClerk(page: ft.Page, user):
+    but_back = ft.FilledTonalButton("Back")
+    but_back.on_click = lambda e: spawnLogin(page)
+    but_backCorner = ft.CupertinoButton(icon=ft.Icons.ARROW_BACK, on_click=lambda e: spawnLogin(page))
+    row_back = ft.Container(content=ft.Row([but_backCorner], alignment=ft.MainAxisAlignment.START),bgcolor=ft.colors.SURFACE_VARIANT, padding=ft.padding.all(0))
+    
     page.scroll = True
     userLocationID = user['facility_id']
     #get facility info
@@ -988,7 +1048,7 @@ def spawnClerk(page: ft.Page, user):
     packageDeclaredValueString = ft.Text("Declared Value: ")
     packageDeclaredValueField = ft.TextField(input_filter=ft.InputFilter('^[0-9]*$'), max_length=10)
     def initilizeFields(event):
-        packageWidthField.focus()
+        packageLengthField.focus()
         packageWidthField.value = ""
         packageLengthField.value = ""
         packageHeightField.value = ""
@@ -1019,10 +1079,10 @@ def spawnClerk(page: ft.Page, user):
                 shipmentTypeID = shipmentType['id']
                 shipmentETA = float(shipmentType['days_per500Miles']) * (calculatedDistance/500)
                 shipmentCost = shipmentType['cost_per500Miles']
-        width = float(packageWidthField.value) * float(lengthKey[str(dimensionDropDown.value)])
-        length = float(packageLengthField.value) * float(lengthKey[str(dimensionDropDown.value)])
-        height = float(packageHeightField.value) * float(lengthKey[str(dimensionDropDown.value)])
-        weight = float(packageWeightField.value) * 28.3495
+        width = math.ceil(float(packageWidthField.value) * float(lengthKey[str(dimensionDropDown.value)]))
+        length = math.ceil(float(packageLengthField.value) * float(lengthKey[str(dimensionDropDown.value)]))
+        height = math.ceil(float(packageHeightField.value) * float(lengthKey[str(dimensionDropDown.value)]))
+        weight = math.ceil(float(packageWeightField.value) * 28.3495)
         insuranceID = packageInsuranceField.value
         insuranceIDFinal = 0
         insuranceRow = None
@@ -1068,7 +1128,7 @@ def spawnClerk(page: ft.Page, user):
             ]
         page.open(ft.AlertDialog(
             title=ft.Text("Package Added"),
-            content=ft.Text("Tracking Number: " + displayIDProperly(str(id))),
+            content=ft.Text("Tracking Number: " + displayIDProperly(str(id)), selectable=True),
             actions=material_actions,
             on_dismiss=initilizeFields,
         ))
@@ -1156,10 +1216,11 @@ def spawnClerk(page: ft.Page, user):
     additionalInfoButton = ft.FilledTonalButton("Additional Options", on_click=spawnAdditionalOptions)
 
 
-    inputContainer = ft.Column(
+    inputContainer = ft.Container(content=ft.Column(
         [
+            
             ft.Row([ft.Text(" ")]),
-            ft.Row([packageWidthString, packageWidthField, packageDimensionsSeperator, packageLengthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
+            ft.Row([packageWidthString, packageLengthField, packageDimensionsSeperator,packageWidthField, packageDimensionsSeperator, packageHeightField, dimensionDropDown]),
             ft.Row([packageWeightString, packageWeightField, packageWeightUnit]),
             ft.Row([packageShipmentString, packageShipmentField]),
             ft.Row([packageFirstNameString, packageFirstNameField]),
@@ -1174,7 +1235,8 @@ def spawnClerk(page: ft.Page, user):
             additionalInfoButton,
             packageProcessButton
         ],
-    )
+    ),padding=ft.padding.all(10))
+    page.add(row_back)
     page.add(inputContainer)
     initilizeFields(None)
 
