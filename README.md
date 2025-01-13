@@ -47,8 +47,8 @@ The UNSPS required a simple and efficient web application with the following cap
 ### Setup
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/UNSPS.git
-   cd UNSPS
+   git clone https://github.com/mcallbosco/DBProject.git
+   cd DBProject
    ```
 2. Configure the MySQL credentials in `MYSQLCREDS.SAMPLE.JSON` and rename the file to `MYSQLCREDS.JSON`.
 3. Configure the geolocation API key in `IPGEOLOCATIONKEY.SAMPLE.JSON` and rename the file to `IPGEOLOCATIONKEY.JSON`
