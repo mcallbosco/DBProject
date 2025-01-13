@@ -367,7 +367,7 @@ def redo(page: ft.Page):
             if delivered:
                 progressBar.value = 1
                 beingDeliveredText.visible = False
-                prettyDelivery = delivered.strftime("%m/%d/%Y, %H:%M:%S")
+                prettyDelivery = (delivered + datetime.timedelta(hours=offset)).strftime("%m/%d/%Y, %I:%M %p")
                 packageDeliveryDate.value = prettyDelivery
                 packageDeliveryX = float(myresult[0]["delivery_cordinates_x"])
                 packageDeliveryY = float(myresult[0]["delivery_cordinates_y"])
